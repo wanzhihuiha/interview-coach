@@ -35,4 +35,9 @@ public interface AgentAuditLogRepository extends JpaRepository<AgentAuditLogReco
     Page<AgentAuditLogRecord> findByCreatedAtBetween(LocalDateTime startTime,
                                                       LocalDateTime endTime,
                                                       Pageable pageable);
+
+    /**
+     * 按创建时间范围统计审计日志数量。
+     */
+    long countByCreatedAtBetween(LocalDateTime startTime, LocalDateTime endTime);
 }

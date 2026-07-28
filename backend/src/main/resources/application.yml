@@ -129,6 +129,11 @@ position:
 # 方法 key 规则为：声明类简单名.方法名，例如 LlmInterviewService.chat。
 # 未配置的方法使用 @AgentPermission 注解默认值；动态评估器始终生效。
 interview:
+  question:
+    # 题目去重相似度阈值（0.0 - 1.0），达到该阈值视为重复题目
+    duplicate-threshold: 0.85
+    # 文本相似度计算使用的 n-gram 大小，中文推荐 2
+    duplicate-ngram: 2
   agent-permissions:
     enabled: true
     audit-log: true

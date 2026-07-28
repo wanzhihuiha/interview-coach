@@ -7,6 +7,7 @@ import com.interviewcoach.interview.domain.entity.PermanentQuestionBank;
 import com.interviewcoach.interview.domain.entity.TemporaryQuestionBank;
 import com.interviewcoach.interview.domain.repository.PermanentQuestionBankRepository;
 import com.interviewcoach.interview.domain.repository.TemporaryQuestionBankRepository;
+import com.interviewcoach.interview.domain.service.QuestionSimilarityChecker;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class QuestionBankTool {
 
     private final TemporaryQuestionBankRepository temporaryRepository;
     private final PermanentQuestionBankRepository permanentRepository;
+    private final QuestionSimilarityChecker similarityChecker;
 
     /**
      * 将生成的新题存入临时 RAG，存入前会先与临时和永久题库去重。
@@ -60,6 +62,7 @@ public class QuestionBankTool {
         entity.setExpectedAnswer(item.getExpectedAnswer());
         entity.setSourceInterviewId(item.getId());
         entity.setStatus("PENDING");
+        entity.setDifficultyLevel(item.getDifficultyLevel() != null ? item.getDifficultyLevel() : 3);
 
         temporaryRepository.save(entity);
         log.info("[QuestionBankTool] 新题已存入临时 RAG: id={}, jobCategory={}, phase={}",
@@ -68,7 +71,7 @@ public class QuestionBankTool {
     }
 
     /**
-     * 检查指定题目在临时 RAG 和永久 RAG 中是否已存在（MVP 阶段按精确匹配）。
+     * 检查指定题目在临时 RAG 和永久 RAG 中是否已存在（基于文本相似度）。
      */
     @AgentPermission(AgentType.EVALUATOR)
     public boolean existsDuplicate(String content, String jobCategory, String phase) {
@@ -76,9 +79,32 @@ public class QuestionBankTool {
             return false;
         }
         String normalized = normalizeContent(content);
-        boolean inTemporary = !temporaryRepository.findByContent(normalized).isEmpty();
-        boolean inPermanent = !permanentRepository.findByContent(normalized).isEmpty();
-        return inTemporary || inPermanent;
+
+        // 1. 精确匹配
+        boolean exactInTemporary = !temporaryRepository.findByContent(normalized).isEmpty();
+        boolean exactInPermanent = !permanentRepository.findByContent(normalized).isEmpty();
+        if (exactInTemporary || exactInPermanent) {
+            return true;
+        }
+
+        // 2. 相似度匹配：检查同一岗位类别+环节下的题目
+        List<TemporaryQuestionBank> temporaryCandidates = temporaryRepository
+                .findByJobCategoryAndPhaseAndStatus(jobCategory, phase, "PENDING");
+        for (TemporaryQuestionBank candidate : temporaryCandidates) {
+            if (similarityChecker.isDuplicate(content, candidate.getContent())) {
+                return true;
+            }
+        }
+
+        List<PermanentQuestionBank> permanentCandidates = permanentRepository
+                .findByJobCategoryAndPhaseOrderByUsageCountAsc(jobCategory, phase);
+        for (PermanentQuestionBank candidate : permanentCandidates) {
+            if (similarityChecker.isDuplicate(content, candidate.getContent())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -154,6 +180,7 @@ public class QuestionBankTool {
         item.setContent(entity.getContent());
         item.setExpectedAnswer(entity.getExpectedAnswer());
         item.setUsageCount(entity.getUsageCount());
+        item.setDifficultyLevel(entity.getDifficultyLevel() != null ? entity.getDifficultyLevel() : 3);
         return item;
     }
 

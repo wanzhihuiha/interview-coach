@@ -96,6 +96,7 @@ public class EvaluatorAgent {
             item.setContent(question);
             item.setExpectedAnswer(null);
             item.setId(context.getInterviewId());
+            item.setDifficultyLevel(context.getCurrentDepth() != null ? context.getCurrentDepth() : 3);
             questionBankTool.saveTemporaryQuestion(item);
         } catch (Exception e) {
             log.warn("[EvaluatorAgent] 写入临时 RAG 失败，不影响评估流程: {}", e.getMessage());

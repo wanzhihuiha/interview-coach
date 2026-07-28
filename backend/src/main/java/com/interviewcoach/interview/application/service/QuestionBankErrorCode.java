@@ -7,7 +7,8 @@ public enum QuestionBankErrorCode {
 
     QUESTION_NOT_FOUND(6201),
     QUESTION_STATUS_INVALID(6202),
-    QUESTION_DUPLICATE(6203);
+    QUESTION_DUPLICATE(6203),
+    QUESTION_CONTENT_EMPTY(6204);
 
     private final int code;
 

@@ -54,6 +54,12 @@ public class TemporaryQuestionBank {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "PENDING";
 
+    /**
+     * 题目难度等级（1-5），默认 3 表示中等难度。
+     */
+    @Column(name = "difficulty_level")
+    private Integer difficultyLevel = 3;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

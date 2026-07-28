@@ -3,8 +3,13 @@
     <div class="page-container">
       <div class="section-header">
         <h2 class="page-title">目标岗位</h2>
-        <el-button type="primary" :icon="Plus" @click="openCreateDialog">新增岗位</el-button>
+        <el-button v-if="!isPublicTab" type="primary" :icon="Plus" @click="openCreateDialog">新增岗位</el-button>
       </div>
+
+      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+        <el-tab-pane label="我的岗位" name="mine" />
+        <el-tab-pane label="公共岗位" name="public" />
+      </el-tabs>
 
       <el-table :data="positions" v-loading="loading" style="width: 100%" highlight-current-row
         @row-click="(row: Position) => selectedId = row.positionId">
@@ -19,10 +24,15 @@
         <el-table-column label="操作" width="280">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openDetail(row)">查看</el-button>
-            <el-button link type="warning" @click.stop="reparse(row.positionId)">重新解析</el-button>
-            <el-button v-if="row.parseStatus === 'PENDING_CONFIRM'" link type="success"
-              @click.stop="confirm(row)">确认</el-button>
-            <el-button link type="danger" @click.stop="remove(row.positionId)">删除</el-button>
+            <template v-if="!isPublicTab">
+              <el-button link type="warning" @click.stop="reparse(row.positionId)">重新解析</el-button>
+              <el-button v-if="row.parseStatus === 'PENDING_CONFIRM'" link type="success"
+                @click.stop="confirm(row)">确认</el-button>
+              <el-button link type="danger" @click.stop="remove(row.positionId)">删除</el-button>
+            </template>
+            <template v-else>
+              <el-button link type="success" @click.stop="selectForInterview(row.positionId)">去面试</el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -132,6 +142,7 @@ import { Plus } from '@element-plus/icons-vue'
 import AppLayout from '@/components/AppLayout.vue'
 import {
   getPositionList,
+  getPublicPositionList,
   createPosition,
   uploadPosition,
   getPositionProfile,
@@ -146,6 +157,8 @@ const router = useRouter()
 const positions = ref<Position[]>([])
 const selectedId = ref<number | null>(null)
 const loading = ref(false)
+const activeTab = ref<'mine' | 'public'>('mine')
+const isPublicTab = computed(() => activeTab.value === 'public')
 const showCreateDialog = ref(false)
 const showProfileDialog = ref(false)
 const profileLoading = ref(false)
@@ -194,13 +207,22 @@ onMounted(async () => {
 async function loadPositions() {
   loading.value = true
   try {
-    positions.value = await getPositionList()
-    if (positions.value.length > 0 && !selectedId.value) {
-      selectedId.value = positions.value[0].positionId
-    }
+    positions.value = activeTab.value === 'mine'
+      ? await getPositionList()
+      : await getPublicPositionList()
+    selectedId.value = positions.value.length > 0 ? positions.value[0].positionId : null
   } finally {
     loading.value = false
   }
+}
+
+function handleTabChange() {
+  selectedId.value = null
+  loadPositions()
+}
+
+function selectForInterview(positionId: number) {
+  router.push({ path: '/interview/config', query: { positionId: String(positionId) } })
 }
 
 function openCreateDialog() {

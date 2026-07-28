@@ -43,6 +43,30 @@ export async function getPositionList(params?: {
   return res.data?.content || []
 }
 
+export async function getPublicPositionList(params?: {
+  page?: number
+  size?: number
+}): Promise<Position[]> {
+  const res = await apiCall(
+    () => request.get('/positions/public', { params }) as Promise<ApiResponse<{ content: Position[] }>>,
+    () => ({ content: mockPositions }),
+    { content: [] }
+  )
+  return res.data?.content || []
+}
+
+export async function getAccessiblePositionList(params?: {
+  page?: number
+  size?: number
+}): Promise<Position[]> {
+  const res = await apiCall(
+    () => request.get('/positions/accessible', { params }) as Promise<ApiResponse<{ content: Position[] }>>,
+    () => ({ content: mockPositions }),
+    { content: [] }
+  )
+  return res.data?.content || []
+}
+
 export async function createPosition(data: Partial<Position>): Promise<Position> {
   const payload = {
     positionName: data.positionName,

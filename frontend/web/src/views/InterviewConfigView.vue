@@ -91,13 +91,14 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppLayout from '@/components/AppLayout.vue'
-import { getResumeList, getPositionList, startInterview } from '@/api'
+import { getResumeList, getPositionList, getPublicPositionList, startInterview } from '@/api'
 import type { Resume, Position, InterviewPhase } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
 const resumes = ref<Resume[]>([])
 const positions = ref<Position[]>([])
 const selectedResumeId = ref<number | null>(null)
@@ -117,15 +118,29 @@ const canStart = computed(() => {
 })
 
 onMounted(async () => {
-  const [rList, pList] = await Promise.all([
+  const [rList, myPositions, publicPositions] = await Promise.all([
     getResumeList(),
-    getPositionList()
+    getPositionList(),
+    getPublicPositionList()
   ])
   resumes.value = rList
-  positions.value = pList
+  const merged = mergePositions(myPositions, publicPositions)
+  positions.value = merged
   if (rList[0]) selectedResumeId.value = rList[0].resumeId
-  if (pList[0]) selectedPositionId.value = pList[0].positionId
+
+  const queryPositionId = Number(route.query.positionId)
+  if (queryPositionId && merged.some(p => p.positionId === queryPositionId)) {
+    selectedPositionId.value = queryPositionId
+  } else if (merged[0]) {
+    selectedPositionId.value = merged[0].positionId
+  }
 })
+
+function mergePositions(own: Position[], publicList: Position[]): Position[] {
+  const ownIds = new Set(own.map(p => p.positionId))
+  const dedupedPublic = publicList.filter(p => !ownIds.has(p.positionId))
+  return [...own, ...dedupedPublic]
+}
 
 async function handleStart() {
   if (!canStart.value) return

@@ -14,7 +14,7 @@
       </template>
 
       <el-table :data="positions" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="positionId" label="ID" width="80" />
         <el-table-column prop="positionName" label="岗位名称" />
         <el-table-column prop="jobCategory" label="岗位类别" width="120" />
         <el-table-column prop="companyName" label="公司" />
@@ -106,22 +106,32 @@ async function loadPositions() {
 async function handleApprove(row: PositionListItem) {
   try {
     await ElMessageBox.confirm(`确认通过岗位 "${row.positionName}" 吗？`, '提示', { type: 'warning' })
-    await auditPosition(row.id, 'APPROVED')
-    ElMessage.success('已通过')
-    loadPositions()
   } catch {
     // 取消操作
+    return
+  }
+  try {
+    await auditPosition(row.positionId, 'APPROVED')
+    ElMessage.success('已通过')
+    loadPositions()
+  } catch (error) {
+    ElMessage.error((error as Error).message || '审核失败')
   }
 }
 
 async function handleReject(row: PositionListItem) {
   try {
     await ElMessageBox.confirm(`确认拒绝岗位 "${row.positionName}" 吗？`, '提示', { type: 'warning' })
-    await auditPosition(row.id, 'REJECTED')
-    ElMessage.success('已拒绝')
-    loadPositions()
   } catch {
     // 取消操作
+    return
+  }
+  try {
+    await auditPosition(row.positionId, 'REJECTED')
+    ElMessage.success('已拒绝')
+    loadPositions()
+  } catch (error) {
+    ElMessage.error((error as Error).message || '审核失败')
   }
 }
 

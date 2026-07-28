@@ -3,7 +3,7 @@
  */
 
 export interface PositionListItem {
-  id: number
+  positionId: number
   positionName: string
   companyName?: string
   jobCategory: string
@@ -22,6 +22,13 @@ export interface PositionListResponse {
   totalElements: number
   totalPages: number
   currentPage: number
+}
+
+export interface AdminDashboardStats {
+  pendingPositions: number
+  pendingQuestions: number
+  totalUsers: number
+  todayAudits: number
 }
 
 export interface AuditLogItem {
@@ -71,4 +78,5 @@ export interface QuestionBankItem {
   content: string
   expectedAnswer?: string
   usageCount?: number
+  difficultyLevel?: number
 }

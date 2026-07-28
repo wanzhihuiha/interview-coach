@@ -102,7 +102,7 @@ import { useRouter } from 'vue-router'
 import { Monitor, Plus } from '@element-plus/icons-vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { useUserStore } from '@/stores/user'
-import { getResumeList, getPositionList, getInterviewHistory } from '@/api'
+import { getResumeList, getAccessiblePositionList, getInterviewHistory } from '@/api'
 import type { Resume, Position, InterviewSession } from '@/types'
 
 const router = useRouter()
@@ -114,13 +114,13 @@ const recentInterviews = ref<InterviewSession[]>([])
 
 onMounted(async () => {
   userStore.fetchUserInfo()
-  const [rList, pList, hList] = await Promise.all([
+  const [rList, accessiblePositions, hList] = await Promise.all([
     getResumeList(),
-    getPositionList(),
+    getAccessiblePositionList({ size: 5 }),
     getInterviewHistory()
   ])
   resumes.value = rList.slice(0, 2)
-  positions.value = pList.slice(0, 2)
+  positions.value = accessiblePositions.slice(0, 5)
   recentInterviews.value = hList.slice(0, 3)
 })
 

@@ -51,6 +51,12 @@ public class PermanentQuestionBank {
     @Column(name = "usage_count")
     private Integer usageCount = 0;
 
+    /**
+     * 题目难度等级（1-5），默认 3 表示中等难度。
+     */
+    @Column(name = "difficulty_level")
+    private Integer difficultyLevel = 3;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

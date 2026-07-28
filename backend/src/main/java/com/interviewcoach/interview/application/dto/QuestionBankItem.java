@@ -16,4 +16,5 @@ public class QuestionBankItem {
     private String content;
     private String expectedAnswer;
     private Integer usageCount;
+    private Integer difficultyLevel;
 }

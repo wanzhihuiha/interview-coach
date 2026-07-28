@@ -3,6 +3,7 @@ package com.interviewcoach.admin.question.application.service;
 import static com.interviewcoach.interview.application.service.QuestionBankErrorCode.*;
 
 import com.interviewcoach.interview.application.dto.QuestionBankItem;
+import com.interviewcoach.interview.application.dto.QuestionBankListResponse;
 import com.interviewcoach.common.exception.BusinessException;
 import com.interviewcoach.interview.domain.entity.PermanentQuestionBank;
 import com.interviewcoach.interview.domain.entity.TemporaryQuestionBank;
@@ -11,6 +12,9 @@ import com.interviewcoach.interview.domain.repository.TemporaryQuestionBankRepos
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +46,25 @@ public class QuestionBankAdminService {
     }
 
     /**
+     * 分页查询永久题库内容，支持按岗位类别、环节和关键字过滤。
+     */
+    @Transactional(readOnly = true)
+    public QuestionBankListResponse listPermanentQuestions(
+            String jobCategory, String phase, String keyword, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        String keywordParam = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
+        Page<PermanentQuestionBank> pageResult = permanentRepository.findPermanentQuestions(
+                jobCategory, phase, keywordParam, pageable);
+
+        QuestionBankListResponse response = new QuestionBankListResponse();
+        response.setContent(pageResult.getContent().stream().map(this::toItem).toList());
+        response.setTotalElements(pageResult.getTotalElements());
+        response.setTotalPages(pageResult.getTotalPages());
+        response.setCurrentPage(pageResult.getNumber());
+        return response;
+    }
+
+    /**
      * 将指定的临时题目审核通过并加入永久 RAG。
      */
     @Transactional
@@ -69,6 +92,7 @@ public class QuestionBankAdminService {
         permanent.setExpectedAnswer(temporary.getExpectedAnswer());
         permanent.setSourceTemporaryId(temporary.getId());
         permanent.setUsageCount(0);
+        permanent.setDifficultyLevel(temporary.getDifficultyLevel() != null ? temporary.getDifficultyLevel() : 3);
         permanentRepository.save(permanent);
 
         temporary.setStatus("APPROVED");
@@ -94,6 +118,31 @@ public class QuestionBankAdminService {
         log.info("[QuestionBankAdminService] 临时题目已拒绝: temporaryId={}", temporaryQuestionId);
     }
 
+    /**
+     * 更新待审核的临时题目主题、内容、参考答案及难度等级。
+     */
+    @Transactional
+    public void updateTemporaryQuestion(Long temporaryQuestionId, QuestionBankItem item) {
+        TemporaryQuestionBank temporary = temporaryRepository.findById(temporaryQuestionId)
+                .orElseThrow(() -> new BusinessException(QUESTION_NOT_FOUND.getCode(), "临时题目不存在"));
+        if (!"PENDING".equals(temporary.getStatus())) {
+            throw new BusinessException(QUESTION_STATUS_INVALID.getCode(), "仅待审核题目可编辑");
+        }
+        if (item.getContent() == null || item.getContent().isBlank()) {
+            throw new BusinessException(QUESTION_CONTENT_EMPTY.getCode(), "题目内容不能为空");
+        }
+        if (item.getTopicName() != null) {
+            temporary.setTopicName(item.getTopicName().trim());
+        }
+        temporary.setContent(item.getContent().trim());
+        temporary.setExpectedAnswer(item.getExpectedAnswer());
+        if (item.getDifficultyLevel() != null) {
+            temporary.setDifficultyLevel(Math.max(1, Math.min(5, item.getDifficultyLevel())));
+        }
+        temporaryRepository.save(temporary);
+        log.info("[QuestionBankAdminService] 临时题目已更新: temporaryQuestionId={}", temporaryQuestionId);
+    }
+
     private QuestionBankItem toItem(TemporaryQuestionBank entity) {
         QuestionBankItem item = new QuestionBankItem();
         item.setId(entity.getId());
@@ -103,6 +152,21 @@ public class QuestionBankAdminService {
         item.setTopicName(entity.getTopicName());
         item.setContent(entity.getContent());
         item.setExpectedAnswer(entity.getExpectedAnswer());
+        item.setDifficultyLevel(entity.getDifficultyLevel() != null ? entity.getDifficultyLevel() : 3);
+        return item;
+    }
+
+    private QuestionBankItem toItem(PermanentQuestionBank entity) {
+        QuestionBankItem item = new QuestionBankItem();
+        item.setId(entity.getId());
+        item.setJobCategory(entity.getJobCategory());
+        item.setPhase(entity.getPhase());
+        item.setTopicId(entity.getTopicId());
+        item.setTopicName(entity.getTopicName());
+        item.setContent(entity.getContent());
+        item.setExpectedAnswer(entity.getExpectedAnswer());
+        item.setUsageCount(entity.getUsageCount());
+        item.setDifficultyLevel(entity.getDifficultyLevel() != null ? entity.getDifficultyLevel() : 3);
         return item;
     }
 }

@@ -42,14 +42,28 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { getAdminDashboardStats } from '@/manager/api/admin'
+import type { AdminDashboardStats } from '@/manager/types'
 
-const stats = reactive({
+const stats = reactive<AdminDashboardStats>({
   pendingPositions: 0,
   pendingQuestions: 0,
   totalUsers: 0,
   todayAudits: 0
 })
+
+async function loadStats() {
+  try {
+    const res = await getAdminDashboardStats()
+    Object.assign(stats, res.data)
+  } catch (error) {
+    ElMessage.error((error as Error).message || '加载统计数据失败')
+  }
+}
+
+onMounted(loadStats)
 </script>
 
 <style scoped>

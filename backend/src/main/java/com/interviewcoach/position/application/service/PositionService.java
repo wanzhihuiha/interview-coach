@@ -267,6 +267,23 @@ public class PositionService {
     }
 
     /**
+     * 查询当前用户可访问的岗位列表（用户自己的岗位 + 已审核通过的公共岗位）。
+     */
+    @Transactional(readOnly = true)
+    public PositionListResponse listAccessiblePositions(Long userId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Position> positionPage = positionRepository.findAccessibleByUserId(
+                userId, PositionAuditStatus.APPROVED, pageable);
+
+        PositionListResponse response = new PositionListResponse();
+        response.setContent(positionPage.getContent().stream().map(this::toListItem).toList());
+        response.setTotalElements(positionPage.getTotalElements());
+        response.setTotalPages(positionPage.getTotalPages());
+        response.setCurrentPage(positionPage.getNumber());
+        return response;
+    }
+
+    /**
      * 管理员：分页查询所有用户上传的岗位（支持按审核状态筛选）。
      *
      * <p>本方法自身不检查管理员角色，权限依赖管理端 Controller 的方法安全配置。审核状态为空或非法时，
@@ -336,14 +353,24 @@ public class PositionService {
     }
 
     /**
+<<<<<<< ours
      * 查询岗位画像。
      *
      * <p>这里只允许岗位所有者查询，其他用户即使能够查看已审核通过的公共岗位详情，也不能通过本方法读取其画像。
      * 画像尚未生成时返回空画像；已保存的画像 JSON 无法解析时同样降级为空画像，而不是抛出解析异常。
+=======
+     * 查询岗位画像（用户视角：仅可查看自己的岗位或已审核通过的公共岗位）。
+>>>>>>> theirs
      */
     @Transactional(readOnly = true)
     public PositionProfileResponse getPositionProfile(Long userId, Long positionId) {
-        Position position = findPositionByIdAndUserId(positionId, userId);
+        Position position = positionRepository.findById(positionId)
+                .orElseThrow(() -> new BusinessException(POSITION_NOT_FOUND, "岗位不存在"));
+        if (!position.getUserId().equals(userId)
+                && !(Boolean.TRUE.equals(position.getIsPublic())
+                        && position.getAuditStatus() == PositionAuditStatus.APPROVED)) {
+            throw new BusinessException(POSITION_ACCESS_DENIED, "无权查看该岗位画像");
+        }
         PositionProfileResponse response = new PositionProfileResponse();
         response.setPositionId(positionId);
         response.setParseStatus(position.getParseStatus().name());

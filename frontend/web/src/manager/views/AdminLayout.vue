@@ -22,6 +22,10 @@
           <el-icon><Document /></el-icon>
           <span>题目审核</span>
         </el-menu-item>
+        <el-menu-item index="/admin/question-bank">
+          <el-icon><Collection /></el-icon>
+          <span>题库管理</span>
+        </el-menu-item>
         <el-menu-item index="/admin/users">
           <el-icon><User /></el-icon>
           <span>用户管理</span>
@@ -67,6 +71,7 @@ import {
   DataLine,
   OfficeBuilding,
   Document,
+  Collection,
   User,
   Tickets
 } from '@element-plus/icons-vue'
@@ -84,6 +89,7 @@ const pageTitle = computed(() => {
     '/admin': '管理概览',
     '/admin/positions': '岗位审核',
     '/admin/questions': '题目审核',
+    '/admin/question-bank': '题库管理',
     '/admin/users': '用户管理',
     '/admin/audit-logs': '审计日志'
   }

@@ -71,6 +71,17 @@ public class PositionController {
         return ApiResponse.success(positionService.listPublicPositions(page, size));
     }
 
+    /**
+     * 查询当前用户可访问的岗位列表（用户自己的岗位 + 已审核通过的公共岗位），用于首页展示。
+     */
+    @GetMapping("/accessible")
+    public ApiResponse<PositionListResponse> listAccessiblePositions(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "10") int size) {
+        return ApiResponse.success(positionService.listAccessiblePositions(userId, page, size));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<PositionDetailResponse> getPositionDetail(
             @AuthenticationPrincipal Long userId,

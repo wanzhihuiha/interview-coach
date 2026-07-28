@@ -5,6 +5,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -54,9 +56,24 @@ public interface PositionRepository extends JpaRepository<Position, Long> {
             Pageable pageable);
 
     /**
+     * 查询当前用户可访问的岗位列表（用户自己的岗位 + 已审核通过的公共岗位）。
+     */
+    @Query("SELECT p FROM Position p WHERE p.userId = :userId "
+            + "OR (p.isPublic = true AND p.auditStatus = :approvedStatus)")
+    Page<Position> findAccessibleByUserId(
+            @Param("userId") Long userId,
+            @Param("approvedStatus") com.interviewcoach.position.domain.entity.PositionAuditStatus approvedStatus,
+            Pageable pageable);
+
+    /**
      * 管理员：按审核状态分页查询所有岗位。
      */
     Page<Position> findByAuditStatus(
             com.interviewcoach.position.domain.entity.PositionAuditStatus auditStatus,
             Pageable pageable);
+
+    /**
+     * 按审核状态统计岗位数量。
+     */
+    long countByAuditStatus(com.interviewcoach.position.domain.entity.PositionAuditStatus auditStatus);
 }

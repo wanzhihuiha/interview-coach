@@ -20,4 +20,9 @@ public interface TemporaryQuestionBankRepository extends JpaRepository<Temporary
      * 按内容精确匹配查询。
      */
     List<TemporaryQuestionBank> findByContent(String content);
+
+    /**
+     * 按审核状态统计题目数量。
+     */
+    long countByStatus(String status);
 }

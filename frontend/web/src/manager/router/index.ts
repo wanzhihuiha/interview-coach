@@ -29,6 +29,12 @@ export const managerRoutes: RouteRecordRaw = {
       meta: { title: '题目审核' }
     },
     {
+      path: 'question-bank',
+      name: 'AdminQuestionBank',
+      component: () => import('@/manager/views/QuestionBankView.vue'),
+      meta: { title: '题库管理' }
+    },
+    {
       path: 'users',
       name: 'AdminUserManage',
       component: () => import('@/manager/views/UserManageView.vue'),
