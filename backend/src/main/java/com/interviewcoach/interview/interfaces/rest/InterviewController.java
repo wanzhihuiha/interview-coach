@@ -58,6 +58,17 @@ public class InterviewController {
         return ApiResponse.success(interviewService.getInterview(userId, id));
     }
 
+    /**
+     * 以 SSE 事件包装一轮回答的处理结果。
+     *
+     * <p>当前实现会先发送“思考中”事件，再在本请求线程同步完成回答评估、流程决策和数据保存，
+     * 随后根据完整结果发送环节变化、下一题、面试结束和完成事件，并在方法返回前把 Emitter 标记为完成。
+     * 方法返回前 Emitter 还没有交给 Spring MVC，这些事件会先被缓存，再由框架统一写入响应，
+     * 因此前端不一定能先看到“思考中”再等待结果，这里也不是把任务放到后台持续输出的流式执行。</p>
+     *
+     * <p>本方法会捕获业务处理中的所有异常，记录日志后改发通用的 SSE 错误事件，不再交给统一异常处理器
+     * 生成常规错误响应。SSE 单次发送发生 {@link IOException} 时只记录警告，不会取消已经开始的业务处理。</p>
+     */
     @PostMapping("/{id}/answer")
     public SseEmitter answer(
             @AuthenticationPrincipal Long userId,
@@ -65,18 +76,21 @@ public class InterviewController {
             @RequestBody SubmitAnswerRequest request,
             HttpServletResponse response) {
 
-        // 禁用缓存并设置 SSE 响应头
+        // 1. 设置 SSE 响应头，避免代理缓存或合并事件。
         response.setHeader("Cache-Control", "no-cache");
         response.setHeader("X-Accel-Buffering", "no");
         response.setContentType("text/event-stream");
         response.setCharacterEncoding("UTF-8");
 
+        // 2. 先发送思考状态；后续业务处理仍在当前请求线程内同步完成。
         SseEmitter emitter = new SseEmitter(300_000L);
         sendEvent(emitter, Map.of("type", "thinking", "content", "面试官正在思考..."));
 
         try {
+            // 3. Service 完成整轮处理并返回最终结果，包括可能发生的环节变化。
             TurnResult result = interviewService.submitAnswer(userId, id, request.getAnswer());
 
+            // 4. 将处理结果转换成前端约定的 SSE 事件，并在本次请求内一次性发送完毕。
             if (result.getPreviousPhase() != null) {
                 sendEvent(emitter, Map.of(
                         "type", "phaseChange",
@@ -101,6 +115,7 @@ public class InterviewController {
             sendEvent(emitter, Map.of("type", "done"));
         } catch (Exception e) {
             log.error("[InterviewController] 面试回答处理失败: interviewId={}, userId={}", id, userId, e);
+            // 业务异常在接口层统一转成 SSE 错误事件，HTTP 响应不再走常规异常处理流程。
             sendEvent(emitter, Map.of(
                     "type", "error",
                     "code", "INTERVIEW_PROCESS_ERROR",
@@ -121,6 +136,9 @@ public class InterviewController {
         return ApiResponse.success(interviewService.endInterview(userId, id));
     }
 
+    /**
+     * 获取当前报告；报告不存在时会在本次 GET 请求中同步分析、脱敏并写入数据库。
+     */
     @GetMapping("/{id}/report")
     public ApiResponse<InterviewReportResponse> report(
             @AuthenticationPrincipal Long userId,
@@ -130,6 +148,9 @@ public class InterviewController {
 
     /**
      * 获取或生成面试对应的成长方案。
+     *
+     * <p>这不是纯查询：方案不存在或未完成时，会在本次 GET 请求中同步生成并保存；
+     * 依赖的面试报告不存在时，还会先生成并保存报告。</p>
      */
     @GetMapping("/{id}/growth-plan")
     public ApiResponse<GrowthPlanResponse> growthPlan(
@@ -145,6 +166,12 @@ public class InterviewController {
         return ApiResponse.success(interviewService.listMessages(userId, id));
     }
 
+    /**
+     * 尽力发送单个 SSE 事件。
+     *
+     * <p>发送发生 {@link IOException} 时只记录警告，不向调用方抛出异常，因此后续事件和业务处理仍会继续；
+     * 客户端断开也不会通过本方法自动取消已经开始的回答处理。</p>
+     */
     private void sendEvent(SseEmitter emitter, Object data) {
         try {
             emitter.send(SseEmitter.event().data(data));
