@@ -1,0 +1,36 @@
+name: Sync from Gitee
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-from-gitee
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync canonical refs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out GitHub repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch canonical refs from Gitee
+        run: |
+          git remote add gitee https://gitee.com/liao-shaoxiang/interview-coach.git
+          git fetch gitee --tags
+
+      - name: Update canonical branches and tags
+        run: |
+          git push origin refs/remotes/gitee/develop:refs/heads/develop
+          git push origin refs/remotes/gitee/master:refs/heads/master
+          git push origin --tags
