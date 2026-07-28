@@ -15,10 +15,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 教练 Agent：把面试报告中的薄弱点整理为可执行的成长方案。
+ * 教练 Agent：基于面试评估报告生成个性化成长方案。
  *
- * <p>上游由 {@code GrowthPlanService} 调用；当前实现不调用大模型，而是根据岗位大类和内置规则、
- * 资源表生成学习路径、练习题和知识缺口，再输出结构化结果与 Markdown 内容。</p>
+ * <p>支持按岗位大类（技术、产品、设计、运营、销售等）生成差异化学习路径、
+ * 推荐资源与练习，不再局限于 Java 技术栈。</p>
  */
 @Slf4j
 @Component
@@ -29,11 +29,7 @@ public class CoachAgent {
     private final ObjectMapper objectMapper;
 
     /**
-     * 使用通用岗位规则生成成长方案，并从报告文本中提取薄弱点。
-     *
-     * <p>这是未提供岗位类别和结构化薄弱点时的兼容入口。当前只识别报告中首次出现的单行
-     * “劣势：...”内容，并按顿号拆分；没有识别到时由三参数入口补入通用薄弱点。
-     * 该解析没有对 {@code null} 报告文本做保护。</p>
+     * 根据面试报告生成成长方案（通用兜底，不区分岗位类型）。
      *
      * @param reportText 面试评估报告文本（含分数、维度、优劣势、结论）
      * @return 结构化成长方案
@@ -43,29 +39,22 @@ public class CoachAgent {
     }
 
     /**
-     * 根据岗位类别和薄弱点，使用本地规则与模板生成成长方案。
+     * 根据面试报告、岗位类别和已解析的薄弱点列表生成成长方案。
      *
-     * <p>岗位类别会先归一化；没有有效薄弱点时补入一条默认项。学习路径、练习题和知识缺口都只使用
-     * 薄弱点列表的前 3 项，最后汇总为 Markdown。{@code reportText} 参数当前保留但不参与生成；
-     * 整个过程仅在教练 Agent 身份上下文中执行，不会调用大模型。</p>
-     *
-     * @param reportText   面试评估报告文本，当前实现未使用
+     * @param reportText   面试评估报告文本
      * @param jobCategory  岗位大类（如 TECH、PRODUCT、OPERATION）
      * @param weaknesses   具体薄弱点列表
      * @return 结构化成长方案
      */
     public GrowthPlanResponse generatePlan(String reportText, String jobCategory, List<String> weaknesses) {
         return AgentContext.runAs(AgentType.COACH, () -> {
-            // 先统一岗位分类，避免上游传入空值或非标准名称导致规则选择不一致。
             String category = JobCategory.normalize(jobCategory);
 
             List<String> actualWeaknesses = weaknesses;
             if (actualWeaknesses == null || actualWeaknesses.isEmpty()) {
-                // 报告没有给出薄弱点时仍生成一条通用改进路径，避免返回空方案。
                 actualWeaknesses = List.of(buildDefaultWeakness(category));
             }
 
-            // 三部分内容来自同一组薄弱点，最后再汇总成前端直接展示的 Markdown。
             GrowthPlanResponse response = new GrowthPlanResponse();
             response.setLearningPath(buildLearningPath(actualWeaknesses, category));
             response.setExercises(buildExercises(actualWeaknesses, category));
@@ -83,12 +72,6 @@ public class CoachAgent {
         return "岗位核心能力实践：建议结合目标岗位补充具体场景案例和实战经验";
     }
 
-    /**
-     * 从报告文本首次出现的单行“劣势：...”中提取薄弱点。
-     *
-     * <p>匹配后会移除方括号并按中文顿号拆分；当前不会解析“薄弱知识点”章节、项目符号、
-     * 多行列表或 JSON。没有匹配时返回空列表，由上层补入默认薄弱点。</p>
-     */
     private List<String> extractWeaknesses(String reportText) {
         List<String> result = new ArrayList<>();
         Pattern pattern = Pattern.compile("劣势[：:]\\s*(.+?)(?:\\n|$)");
@@ -108,9 +91,6 @@ public class CoachAgent {
         return result;
     }
 
-    /**
-     * 按薄弱点顺序生成最多 3 个学习阶段，时长依次固定为 1 周、1-2 周和 2-3 周。
-     */
     private List<GrowthPlanResponse.LearningPathItem> buildLearningPath(List<String> weaknesses, String category) {
         List<GrowthPlanResponse.LearningPathItem> paths = new ArrayList<>();
         String[] durations = {"1 周", "1-2 周", "2-3 周"};
@@ -150,12 +130,6 @@ public class CoachAgent {
         );
     }
 
-    /**
-     * 为单个薄弱点匹配内置学习资源。
-     *
-     * <p>先取中英文冒号前的主题，在对应岗位资源表中精确匹配；没有结果时再按岗位类别执行关键词匹配，
-     * 两次都未命中则返回空资源列表。</p>
-     */
     private List<GrowthPlanResponse.LearningPathItem.Resource> buildResources(String weakness, String category) {
         String topic = extractTopic(weakness);
         List<ResourceEntry> entries = resourceMapFor(category).getOrDefault(topic, List.of());
@@ -424,10 +398,6 @@ public class CoachAgent {
     );
     // CHECKSTYLE:ON
 
-    /**
-     * 根据前 3 个薄弱点生成练习。
-     * 技术岗依次使用概念问答、方案设计和代码实践，其他岗位依次使用场景分析、方案设计和模拟演练。
-     */
     private List<GrowthPlanResponse.Exercise> buildExercises(List<String> weaknesses, String category) {
         List<GrowthPlanResponse.Exercise> exercises = new ArrayList<>();
         String[] types = exerciseTypesFor(category);
@@ -469,10 +439,6 @@ public class CoachAgent {
         };
     }
 
-    /**
-     * 根据前 3 个薄弱点生成知识缺口。
-     * 第一项重要度固定为高，其余固定为中；关键词只按岗位类别使用固定模板。
-     */
     private List<GrowthPlanResponse.KnowledgeGap> buildKnowledgeGaps(List<String> weaknesses, String category) {
         List<GrowthPlanResponse.KnowledgeGap> gaps = new ArrayList<>();
         for (int i = 0; i < Math.min(weaknesses.size(), 3); i++) {
@@ -503,10 +469,6 @@ public class CoachAgent {
         return List.of("核心方法", "标杆案例", "实战演练", "面试表达");
     }
 
-    /**
-     * 将结构化方案依次渲染为学习路径、知识补全和练习题三部分 Markdown。
-     * 推荐资源只输出名称和链接，不输出资源类型；当前不会对动态文本做额外 Markdown 转义。
-     */
     private String buildMarkdown(GrowthPlanResponse plan) {
         StringBuilder md = new StringBuilder();
         md.append("# 成长方案\n\n");

@@ -1,0 +1,19 @@
+姓名：王五
+电话：13700137000
+邮箱：wangwu@example.com
+
+教育背景：
+- 上海交通大学 计算机科学与技术 本科 2014-2018
+
+工作经历：
+- 美团 高级Java工程师 2021-至今
+  负责外卖订单履约系统，使用 Spring Boot、Dubbo、MySQL、Redis、RocketMQ。
+  设计订单拆分与合并策略，支撑日均千万级订单。
+- 京东 后端开发工程师 2018-2021
+  负责商品库存系统，使用 Java、Spring Cloud、Elasticsearch。
+
+技能：Java、Spring Boot、Dubbo、MySQL、Redis、RocketMQ、Elasticsearch、分布式事务
+
+项目经验：
+- 外卖订单履约中台建设，支持多业务线接入，日均处理 3000 万单。
+- 库存预占与释放系统重构，大促期间零库存超卖。

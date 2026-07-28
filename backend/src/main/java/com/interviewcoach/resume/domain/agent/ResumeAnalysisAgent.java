@@ -13,11 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 简历解析流程中的画像生成组件。
- *
- * <p>上游 {@code ResumeService} 传入已提取的简历文本；本组件先对文本脱敏，再调用 {@link LlmService}
- * 生成结构化画像，并补齐调用方需要的集合字段。模型调用失败、返回内容无法解析或输入为空时，
- * 本组件返回空画像而不是向上抛出失败；上游当前会把这个结果作为待确认画像继续保存。
+ * 简历分析智能体，负责调用 LLM 解析简历文本并生成用户画像。
  */
 @Slf4j
 @Component
@@ -85,27 +81,21 @@ public class ResumeAnalysisAgent {
     private final ObjectMapper objectMapper;
 
     /**
-     * 将原始简历文本转换为用户画像。
-     *
-     * <p>调用顺序为：校验文本 -> 脱敏 -> 调用模型 -> 提取并反序列化 JSON。
-     * 输入为空、模型调用失败或模型结果无法解析时返回空画像；脱敏等模型调用前的异常仍会向上抛出。
+     * 分析简历文本并生成用户画像。
      *
      * @param resumeText 原始简历文本
-     * @return 模型画像或降级后的空画像，不返回 {@code null}
+     * @return 用户画像数据
      */
     public UserProfileData analyze(String resumeText) {
         return AgentContext.runAs(AgentType.RESUME_ANALYSIS, () -> {
-            // 1. 空文本不调用模型，直接返回结构稳定的空画像。
             if (resumeText == null || resumeText.isBlank()) {
                 log.warn("[ResumeAnalysisAgent] 简历文本为空，返回空画像");
                 return UserProfileData.empty();
             }
 
-            // 2. 原文先脱敏，再进入模型提示词，避免直接发送简历中的个人信息。
             String desensitizedText = desensitizer.desensitize(resumeText);
             String userPrompt = String.format(USER_PROMPT_TEMPLATE, desensitizedText);
 
-            // 3. 模型异常和返回格式异常都在本组件内降级，不中断上游解析流程。
             try {
                 String response = llmService.chat(SYSTEM_PROMPT, userPrompt);
                 return parseProfile(response);
@@ -116,12 +106,6 @@ public class ResumeAnalysisAgent {
         });
     }
 
-    /**
-     * 从模型响应中提取并还原画像，同时补齐上游依赖的默认字段。
-     *
-     * <p>缺失的集合统一为空集合，缺失的置信度统一为 {@code 0.0}；响应无法解析为画像时返回空画像，
-     * 不把模型格式异常继续抛给简历解析流程。
-     */
     private UserProfileData parseProfile(String rawResponse) {
         String json = extractJson(rawResponse);
         try {
@@ -129,7 +113,7 @@ public class ResumeAnalysisAgent {
             if (data == null) {
                 return UserProfileData.empty();
             }
-            // 将缺失集合统一为空集合，避免上游在保存和推断画像时额外处理 null。
+            // 兜底空字段
             if (data.getSkillTags() == null) data.setSkillTags(List.of());
             if (data.getProjectExperience() == null) data.setProjectExperience(List.of());
             if (data.getWorkExperience() == null) data.setWorkExperience(List.of());
@@ -180,17 +164,14 @@ public class ResumeAnalysisAgent {
 
     /**
      * 根据画像数据推断经验水平。
-     *
-     * <p>优先使用模型返回且能够识别的 {@code experienceLevel}；否则先读取 {@code basicInfo.workingYears}，
-     * 再把各段工作经历按年份粗略换算后相加，最后按 3 年和 7 年两个阈值划分等级。多段时间重叠时不会去重，
-     * 只有开始年份的经历会按持续至当前年份计算。
+     * 优先使用 LLM 返回的 experienceLevel；若未返回或非法，则按工作年限兜底。
      */
     public String inferExperienceLevel(UserProfileData data) {
         if (data == null) {
             return "JUNIOR";
         }
 
-        // 1. 优先使用模型返回的可识别等级；这里只校验等级字样，不会复核模型的判断依据。
+        // 1. 优先信任 LLM 根据最新相关工作经验判定的等级
         String llmLevel = normalizeExperienceLevel(data.getExperienceLevel());
         if (llmLevel != null) {
             log.info("[ResumeAnalysisAgent] 使用 LLM 判定的经验等级: {}", llmLevel);
@@ -220,11 +201,6 @@ public class ResumeAnalysisAgent {
         return classifyExperienceLevel(years);
     }
 
-    /**
-     * 按 {@code SENIOR -> MID -> JUNIOR} 的顺序归一化模型等级文本。
-     *
-     * <p>当前采用包含匹配，因此带“高级”字样的“中高级”会先命中 {@code SENIOR}。
-     */
     private static String normalizeExperienceLevel(String level) {
         if (level == null || level.isBlank()) {
             return null;
@@ -251,11 +227,6 @@ public class ResumeAnalysisAgent {
         return "JUNIOR";
     }
 
-    /**
-     * 从单段工作经历描述中粗略提取整年数。
-     *
-     * <p>优先读取“X 年”，否则使用起止年份相减；月份不参与计算，缺少结束年份时按持续至今年处理。
-     */
     private static int extractYears(UserProfileData.WorkExperience work) {
         String duration = work.getDuration();
         if (duration == null || duration.isBlank()) {

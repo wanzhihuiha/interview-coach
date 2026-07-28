@@ -19,11 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 面试官 Agent：根据协调器或各环节 Skill 提供的上下文生成题目文本。
- *
- * <p>本组件读取对应环节的 Skill 提示词并调用模型，但专业面试的开场题会先尝试永久题库，
- * 未命中或取题失败时才调用模型；追问和其他环节直接调用模型。生成结果会经过统一解析和文本兜底后
- * 返回上游保存，本组件不写面试消息，也不推进环节索引。</p>
+ * 面试官 Agent：负责各环节问题生成。
  */
 @Slf4j
 @Component
@@ -35,12 +31,6 @@ public class InterviewerAgent {
     private final SkillsTool skillsTool;
     private final QuestionBankTool questionBankTool;
 
-    /**
-     * 按当前环节分派到对应的题目生成方法。
-     *
-     * <p>自我介绍、专业面试、简历探讨和行为面试分别进入各自生成器，其他值统一生成结束语。
-     * 当前主流程由各环节 Skill 直接调用具体生成器，不经过这个通用入口。</p>
-     */
     public String generateFirstQuestion(InterviewContext context) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
             log.info("[InterviewerAgent] 加载 {} Skill 编排", context.getCurrentPhase());
@@ -75,17 +65,10 @@ public class InterviewerAgent {
         });
     }
 
-    /**
-     * 生成专业面试开场题或追问。
-     *
-     * <p>{@code previousQuestion} 为空表示主题开场，此时先尝试永久题库，题库关闭、无结果或查询异常时
-     * 再调用模型；存在上一题时直接把上一轮问答交给模型生成追问。{@code targetDepth} 只写入模型提示词，
-     * 本方法不会修改上下文深度。</p>
-     */
     public String generateProfessionalQuestion(InterviewContext context, String previousQuestion,
                                                 String previousAnswer, int targetDepth) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
-            // 没有上一题时优先使用永久题库，未命中后再调用模型生成。
+            // 非追问场景优先从永久 RAG 采样题目，降低 LLM 调用并沉淀高质量题目
             if (previousQuestion == null) {
                 String bankQuestion = sampleFromPermanentBank(context);
                 if (bankQuestion != null) {
@@ -116,14 +99,6 @@ public class InterviewerAgent {
         });
     }
 
-    /**
-     * 尝试从永久题库取得一道专业面试题。
-     *
-     * <p>岗位大类为空时使用 {@code GENERAL}。题库工具返回的比例在这里仅作为开关使用：小于等于 0 时
-     * 不查题库，大于 0 时固定查题库，并不会按 0.2、0.4 等比例随机选择来源。主题编号存在时按岗位、
-     * 环节和主题采样，否则只按岗位和环节采样；当前取使用次数升序的第一题，但本方法不增加使用次数。
-     * 无结果或任意异常均返回 {@code null}，由上层降级为模型生成。</p>
-     */
     private String sampleFromPermanentBank(InterviewContext context) {
         try {
             String jobCategory = context.getJobCategory() == null ? "GENERAL" : context.getJobCategory();
@@ -148,12 +123,6 @@ public class InterviewerAgent {
         return null;
     }
 
-    /**
-     * 根据已切换后的上下文生成新主题的过渡题。
-     *
-     * <p>当前只把 {@code nextTopicName} 写入提示词，{@code nextTopicId} 未参与题目选择或模型输入；
-     * 本方法只生成文本，不负责推进主题。</p>
-     */
     public String generateTopicTransition(InterviewContext context, String nextTopicName, String nextTopicId) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
             String skill = skillsTool.getSkillPrompt(InterviewPhase.PROFESSIONAL);
@@ -167,12 +136,6 @@ public class InterviewerAgent {
         });
     }
 
-    /**
-     * 按当前项目索引生成简历探讨题。
-     *
-     * <p>画像或项目列表为空、索引超出列表上界时，提示词使用“你的项目”作为项目名；
-     * 负数索引当前没有额外保护。本方法只读取索引并生成题目，不推进项目索引。</p>
-     */
     public String generateResumeQuestion(InterviewContext context) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
             UserProfileData profile = context.getUserProfile();
@@ -192,12 +155,6 @@ public class InterviewerAgent {
         });
     }
 
-    /**
-     * 按当前行为场景索引生成一道 STAR 风格问题。
-     *
-     * <p>场景来自本类内置的 5 项数组，并用索引取模选择；默认 4 题时只会使用前 4 个场景，
-     * 上限超过 5 时会从第一个场景重新循环。本方法只读取索引，不负责推进场景。</p>
-     */
     public String generateBehavioralQuestion(InterviewContext context) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
             String[] scenarios = {"团队协作", "问题解决", "成长学习", "领导力", "沟通表达"};
@@ -244,13 +201,6 @@ public class InterviewerAgent {
                 + "- 候选人：" + userName;
     }
 
-    /**
-     * 从模型响应中提取题目文本。
-     *
-     * <p>空响应在所有环节都返回“请简要介绍一下自己。”；非空响应依次尝试解析 JSON 的 question 字段、
-     * 用正则提取该字段，最后直接返回去掉代码围栏的原文本。合法 JSON 若缺少 question，最终也会返回整段 JSON，
-     * 而不是固定默认题。</p>
-     */
     private String extractQuestion(String json) {
         if (json == null || json.isBlank()) {
             return "请简要介绍一下自己。";

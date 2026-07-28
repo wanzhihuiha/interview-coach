@@ -9,8 +9,8 @@ import com.interviewcoach.interview.domain.model.NextAction;
 import org.springframework.stereotype.Component;
 
 /**
- * 自我介绍 Skill：由协调器在自我介绍环节调用，并委托面试官 Agent 生成一道开场题。
- * 本环节不评估回答；回答后直接进入下一个已选择环节或结束环节。
+ * 自我介绍 Skill：单一主题，固定数量问题后进入下一环节。
+ * 问题数量可通过上下文配置扩展，默认 3 题后切换。
  */
 @Component
 public class SelfIntroSkill extends AbstractInterviewSkill {
@@ -19,10 +19,6 @@ public class SelfIntroSkill extends AbstractInterviewSkill {
         super(InterviewPhase.SELF_INTRO);
     }
 
-    /**
-     * 进入环节时把自我介绍题数重置为 0，再生成唯一一道开场题。
-     * 当前切换条件不读取该计数，而是在回答一次后固定进入下一环节或结束环节。
-     */
     @Override
     public String generateOpeningQuestion(InterviewContext context) {
         context.setSelfIntroQuestionCount(0);

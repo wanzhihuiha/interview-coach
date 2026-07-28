@@ -43,14 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 岗位准备流程的应用入口。
- *
- * <p>上游由岗位接口调用；本服务负责保存粘贴或上传的 JD、组织画像生成、保存用户确认结果以及处理审核状态。
- * 文件读取交给 {@link JdTextExtractor}，画像生成和降级交给 {@link JdAnalysisAgent}，最终结果写入岗位及画像仓储，
- * 供后续创建面试时读取。
- *
- * <p>主流程：创建 {@code PENDING} 岗位 -> 解析时改为 {@code PARSING} -> 保存画像并改为
- * {@code PENDING_CONFIRM} -> 用户确认后改为 {@code CONFIRMED} 且保持待审核 -> 管理员审核通过后才公开。
+ * 岗位应用服务，处理 JD 上传、解析、确认与管理。
  */
 @Slf4j
 @Service
@@ -72,14 +65,10 @@ public class PositionService {
     private long maxFileSize;
 
     /**
-     * 根据用户粘贴的 JD 创建岗位并立即进入解析流程。
-     *
-     * <p>先保存不可公开的 {@code PENDING} 岗位，再直接调用解析方法。当前调用会沿本次请求继续执行解析，
-     * 因此返回的解析状态取决于解析结束后的真实状态；审核状态始终先保持 {@code PENDING}。
+     * 创建岗位（粘贴文本）。
      */
     @Transactional
     public PositionCreateResponse createPosition(Long userId, PositionCreateRequest request) {
-        // 1. 先校验创建画像所需的岗位名称和 JD 正文。
         if (request.getPositionName() == null || request.getPositionName().isBlank()) {
             throw new BusinessException(POSITION_NAME_EMPTY, "岗位名称不能为空");
         }
@@ -87,7 +76,6 @@ public class PositionService {
             throw new BusinessException(JD_CONTENT_EMPTY, "JD 描述不能为空");
         }
 
-        // 2. 创建私有且待审核的岗位记录，公开范围留给管理员审核决定。
         Position position = new Position();
         position.setUserId(userId);
         position.setPositionName(request.getPositionName().trim());
@@ -102,7 +90,6 @@ public class PositionService {
         position.setIsPublic(false);
         positionRepository.save(position);
 
-        // 3. 当前是本类直接调用，@Async 代理不会介入，解析会继续占用本次调用线程。
         parsePositionAsync(position.getId(), userId);
 
         return new PositionCreateResponse(
@@ -111,24 +98,18 @@ public class PositionService {
     }
 
     /**
-     * 上传 JD 文件、提取正文并创建岗位。
-     *
-     * <p>文件落盘后，从本次上传内容提取正文并保存岗位，再进入与粘贴文本相同的解析流程。
-     * 当前岗位记录不保存已落盘文件的路径，后续也无法通过岗位记录定位并清理该文件。
+     * 上传 JD 文件。
      */
     @Transactional
     public PositionCreateResponse uploadPosition(Long userId, MultipartFile file, String fileType, String positionName) {
-        // 1. 校验文件和岗位名称，再进行落盘与文本提取。
         validateFile(file, fileType);
         if (positionName == null || positionName.isBlank()) {
             throw new BusinessException(POSITION_NAME_EMPTY, "岗位名称不能为空");
         }
 
-        // 文件系统和数据库不共享事务；后续提取或保存失败时，已落盘文件不会自动删除。
         String filePath = fileStorageService.store(userId, file);
         String jdContent = textExtractor.extract(file, fileType.toUpperCase());
 
-        // 2. 当前只保存提取出的 JD 正文，filePath 没有写入岗位记录。
         Position position = new Position();
         position.setUserId(userId);
         position.setPositionName(positionName.trim());
@@ -139,7 +120,6 @@ public class PositionService {
         position.setIsPublic(false);
         positionRepository.save(position);
 
-        // 3. 直接进入画像解析；当前调用不会经过 Spring 异步代理。
         parsePositionAsync(position.getId(), userId);
 
         return new PositionCreateResponse(
@@ -148,32 +128,18 @@ public class PositionService {
     }
 
     /**
-     * 从岗位记录中的 JD 正文生成并保存岗位画像。
-     *
-     * <p>当前由本类的创建、上传和重新解析方法直接调用，虽然方法带有 {@link Async}，实际不会经过 Spring 异步代理。
-     * 处理顺序为：状态改为 {@code PARSING} -> 按正文摘要读取缓存或调用岗位分析 Agent ->
-     * 覆盖或新建画像 -> 状态改为 {@code PENDING_CONFIRM}。
-     *
-     * <p>调用方负责保证岗位属于当前用户且状态允许解析；本方法自身只按 {@code positionId} 加载记录，
-     * 不会再次核对 {@code userId}、锁定状态或解析状态。传入的 {@code userId} 仅在首次创建画像记录时使用。
-     * 缓存键只包含 JD 正文摘要，不包含用户标识和岗位大类，因此相同 JD 会跨用户、跨岗位大类复用七天缓存。
-     *
-     * <p>正文为空时状态改为 {@code PARSE_FAILED}。模型调用失败、模型结果为空或 JSON 无法解析时，
-     * {@link JdAnalysisAgent} 会返回按岗位大类生成的兜底画像；当前流程仍将其保存并进入 {@code PENDING_CONFIRM}。
-     * 缓存访问或画像保存出现的其他异常不会在这里改为失败状态，而是继续向调用方抛出。
+     * 异步解析岗位 JD。
      */
     @Async
     public void parsePositionAsync(Long positionId, Long userId) {
-        // 1. 加载待解析记录并标记为解析中。
         Position position = positionRepository.findById(positionId).orElse(null);
         if (position == null) {
-            log.warn("[PositionService] 解析岗位时记录不存在: positionId={}", positionId);
+            log.warn("[PositionService] 异步解析时岗位不存在: positionId={}", positionId);
             return;
         }
         position.setParseStatus(PositionParseStatus.PARSING);
         positionRepository.save(position);
 
-        // 2. JD 正文为空时直接失败，不调用岗位分析 Agent。
         String jdText = position.getJdContent();
         if (jdText == null || jdText.isBlank()) {
             log.warn("[PositionService] JD 内容为空: positionId={}", positionId);
@@ -182,7 +148,7 @@ public class PositionService {
             return;
         }
 
-        // 3. 全局按 JD 摘要复用七天缓存；缓存不区分用户和岗位大类，未命中时再调用岗位分析 Agent。
+        // 缓存检查
         String md5 = md5(jdText);
         String cacheKey = REDIS_CACHE_PREFIX + md5;
         String cached = redisTemplate.opsForValue().get(cacheKey);
@@ -193,13 +159,11 @@ public class PositionService {
                 profileData = objectMapper.readValue(cached, PositionProfileData.class);
             } catch (JsonProcessingException e) {
                 log.warn("[PositionService] 缓存解析失败，重新调用 LLM: positionId={}", positionId, e);
-                // 当前只绕过坏缓存，本次生成的新画像不会覆盖它；相同 JD 下次仍会再次命中该坏值。
                 profileData = jdAnalysisAgent.analyze(jdText, position.getJobCategory());
             }
         } else {
             profileData = jdAnalysisAgent.analyze(jdText, position.getJobCategory());
             try {
-                // 缓存未命中时会缓存 Agent 的原样返回，包括模型失败时产生的兜底画像。
                 redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(profileData),
                         java.time.Duration.ofSeconds(CACHE_TTL_SECONDS));
             } catch (JsonProcessingException e) {
@@ -207,7 +171,6 @@ public class PositionService {
             }
         }
 
-        // 4. Agent 的兜底画像也是正常返回值，当前仍会保存并交给用户确认。
         saveProfile(positionId, userId, profileData);
         position.setParseStatus(PositionParseStatus.PENDING_CONFIRM);
         if (profileData.getBasicInfo() != null && profileData.getBasicInfo().getLevel() != null) {
@@ -218,9 +181,6 @@ public class PositionService {
 
     /**
      * 查询岗位列表（当前用户上传的岗位）。
-     *
-     * <p>解析状态或审核状态为空时不使用对应条件；传入无法识别的状态值也会被当作未指定条件，
-     * 当前不会向调用方返回参数错误。
      */
     @Transactional(readOnly = true)
     public PositionListResponse listPositions(Long userId, int page, int size,
@@ -285,9 +245,6 @@ public class PositionService {
 
     /**
      * 管理员：分页查询所有用户上传的岗位（支持按审核状态筛选）。
-     *
-     * <p>本方法自身不检查管理员角色，权限依赖管理端 Controller 的方法安全配置。审核状态为空或非法时，
-     * 当前会查询全部岗位而不是返回参数错误。
      */
     @Transactional(readOnly = true)
     public PositionListResponse listAllPositions(int page, int size, String auditStatus) {
@@ -309,11 +266,6 @@ public class PositionService {
         return response;
     }
 
-    /**
-     * 将接口传入的状态筛选值转换为枚举。
-     *
-     * <p>空值或非法值都返回 {@code null}；列表查询把 {@code null} 解释为不使用该筛选条件。
-     */
     private <E extends Enum<E>> E parseEnum(String value, Class<E> enumClass) {
         if (value == null || value.isBlank()) {
             return null;
@@ -342,8 +294,6 @@ public class PositionService {
 
     /**
      * 管理员：查询任意岗位详情。
-     *
-     * <p>本方法只按岗位标识查询，不校验岗位归属或管理员角色；管理员权限由上层管理端 Controller 保证。
      */
     @Transactional(readOnly = true)
     public PositionDetailResponse getPositionDetailForAdmin(Long positionId) {
@@ -353,14 +303,7 @@ public class PositionService {
     }
 
     /**
-<<<<<<< ours
-     * 查询岗位画像。
-     *
-     * <p>这里只允许岗位所有者查询，其他用户即使能够查看已审核通过的公共岗位详情，也不能通过本方法读取其画像。
-     * 画像尚未生成时返回空画像；已保存的画像 JSON 无法解析时同样降级为空画像，而不是抛出解析异常。
-=======
      * 查询岗位画像（用户视角：仅可查看自己的岗位或已审核通过的公共岗位）。
->>>>>>> theirs
      */
     @Transactional(readOnly = true)
     public PositionProfileResponse getPositionProfile(Long userId, Long positionId) {
@@ -387,14 +330,10 @@ public class PositionService {
     }
 
     /**
-     * 用户确认岗位画像。
-     *
-     * <p>仅 {@code PENDING_CONFIRM} 状态允许确认。用户提交的画像会覆盖当前画像记录，岗位改为
-     * {@code CONFIRMED}；同时重新进入待审核且保持私有，只有管理员审核通过后才可供其他用户选择。
+     * 用户确认岗位解析结果。
      */
     @Transactional
     public void confirmPosition(Long userId, Long positionId, PositionProfileData profileData) {
-        // 1. 校验岗位归属、当前状态和用户提交的画像。
         Position position = findPositionByIdAndUserId(positionId, userId);
         if (position.getParseStatus() != PositionParseStatus.PENDING_CONFIRM) {
             throw new BusinessException(POSITION_STATUS_INVALID, "当前状态不允许确认");
@@ -403,7 +342,6 @@ public class PositionService {
             throw new BusinessException(PROFILE_DATA_INVALID, "画像数据无效");
         }
 
-        // 2. 更新画像和岗位状态；saveProfile 会复用已有画像记录而不是新增一条。
         saveProfile(positionId, userId, profileData);
         position.setParseStatus(PositionParseStatus.CONFIRMED);
         // 用户确认后进入待审核状态，由管理员审核通过后方可变为公共岗位
@@ -416,10 +354,7 @@ public class PositionService {
     }
 
     /**
-     * 使用已保存的 JD 正文重新执行岗位解析。
-     *
-     * <p>已锁定或正在解析的岗位不能重试。当前实现只把状态重置为 {@code PENDING} 后再次调用解析，
-     * 不会清除按正文摘要保存的缓存，因此相同 JD 可能继续复用原画像。
+     * 重新解析岗位 JD。
      */
     @Transactional
     public PositionCreateResponse reparsePosition(Long userId, Long positionId) {
@@ -431,7 +366,6 @@ public class PositionService {
             throw new BusinessException(POSITION_STATUS_INVALID, "岗位正在解析中，请稍后再试");
         }
 
-        // 仅重置状态并重新进入原解析流程；当前不会清除或绕过画像缓存。
         position.setParseStatus(PositionParseStatus.PENDING);
         positionRepository.save(position);
         parsePositionAsync(position.getId(), userId);
@@ -442,9 +376,7 @@ public class PositionService {
     }
 
     /**
-     * 删除未被面试占用的岗位及画像。
-     *
-     * <p>岗位记录没有保存上传文件路径，因此这里不会删除之前落盘的 JD 文件。
+     * 删除岗位。
      */
     @Transactional
     public void deletePosition(Long userId, Long positionId) {
@@ -458,10 +390,6 @@ public class PositionService {
 
     /**
      * 管理员审核岗位。
-     *
-     * <p>管理员角色由接口层的权限配置保证，本方法自身不做角色校验。只有当前审核状态为
-     * {@code PENDING} 的岗位可进入此流程；目标值按枚举直接解析，因此也允许再次设置为 {@code PENDING}。
-     * 审核结果会同时更新公开标记、审核备注、审核人和审核时间，只有 {@code APPROVED} 会将岗位公开。
      */
     @Transactional
     public void auditPosition(Long positionId, AuditPositionRequest request, Long auditorId) {
@@ -505,12 +433,6 @@ public class PositionService {
                 .orElseThrow(() -> new BusinessException(POSITION_NOT_FOUND, "岗位不存在"));
     }
 
-    /**
-     * 保存一个岗位当前唯一的画像。
-     *
-     * <p>画像先序列化为 JSON；同一 {@code positionId} 已有记录时覆盖原数据，首次保存时才写入传入的
-     * {@code userId}。序列化失败会转为业务异常，不会写入部分画像数据。
-     */
     private void saveProfile(Long positionId, Long userId, PositionProfileData data) {
         String json;
         try {
@@ -519,7 +441,6 @@ public class PositionService {
             throw new BusinessException(PROFILE_DATA_INVALID, "画像数据序列化失败", e);
         }
 
-        // 同一个岗位只维护一条画像：首次解析时新建，重新解析或用户确认时覆盖原记录。
         PositionProfile profile = positionProfileRepository.findByPositionId(positionId)
                 .orElseGet(() -> {
                     PositionProfile p = new PositionProfile();
@@ -531,11 +452,6 @@ public class PositionService {
         positionProfileRepository.save(profile);
     }
 
-    /**
-     * 将仓储中的岗位画像 JSON 还原为对象，并兼容 H2 可能产生的双层 JSON 字符串。
-     *
-     * <p>空值或最终解析失败都降级为空画像，不把存量数据格式问题继续抛给查询接口。
-     */
     private PositionProfileData parseProfileJson(String json) {
         if (json == null || json.isBlank()) {
             return PositionProfileData.empty();
@@ -593,12 +509,6 @@ public class PositionService {
         return response;
     }
 
-    /**
-     * 根据上传文件提取出的 JD 正文推断岗位大类。
-     *
-     * <p>当前只在文件上传流程使用，按关键词识别技术、产品、设计和运营类；正文为空或没有命中关键词时
-     * 返回 {@code TECH}。粘贴文本创建岗位时直接使用请求中的岗位大类，不调用本方法。
-     */
     private String inferJobCategory(String jdText) {
         if (jdText == null) {
             return "TECH";

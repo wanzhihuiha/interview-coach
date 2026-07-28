@@ -12,11 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 岗位解析流程中的画像生成组件。
- *
- * <p>上游 {@code PositionService} 传入 JD 正文和岗位大类；本组件结合类内硬编码的岗位参考内容调用 {@link LlmService}
- * 生成结构化画像，并补齐调用方需要的字段。输入为空、模型调用失败、返回内容无法解析或画像缺少核心内容时，
- * 本组件按岗位大类返回可编辑的兜底画像而不是向上抛出失败；上游当前会把该结果作为待确认画像继续保存。
+ * JD 分析智能体，负责调用 LLM 解析岗位描述并生成岗位画像。
  */
 @Slf4j
 @Component
@@ -30,9 +26,9 @@ public class JdAnalysisAgent {
             """;
 
     /**
-     * 按岗位大类硬编码的参考知识。
-     *
-     * <p>调用模型时会把这段内容与 JD 正文一起放入提示词，用于在 JD 信息不足时补充技能和考察方向。
+     * 参考知识：不同岗位大类的常见技能要求与面试考察点。
+     * 资料综合自 2025-2026 年 CSDN、掘金、知乎、牛客网、人人都是产品经理等平台的最新面试趋势，
+     * 用于辅助 LLM 在 JD 信息不完整时补充合理的考察方向。
      */
     private static final String POSITION_KNOWLEDGE_BASE = """
             【Java 高级工程师（2025-2026）】
@@ -105,38 +101,31 @@ public class JdAnalysisAgent {
     private final ObjectMapper objectMapper;
 
     /**
-     * 在未指定岗位大类时分析 JD 文本。
+     * 分析 JD 文本并生成岗位画像。
      *
      * @param jdText JD 文本
-     * @return 模型画像或默认类别的兜底画像，不返回 {@code null}
+     * @return 岗位画像数据
      */
     public PositionProfileData analyze(String jdText) {
         return AgentContext.runAs(AgentType.JD_ANALYSIS, () -> analyze(jdText, null));
     }
 
     /**
-     * 分析 JD 文本，并在无法得到有效模型结果时按岗位大类降级。
-     *
-     * <p>调用顺序为：校验正文 -> 拼入内置岗位参考内容 -> 调用模型 -> 提取并反序列化 JSON ->
-     * 检查画像是否包含技能或考察方向。输入为空、模型调用或响应解析异常、核心内容为空时都会转为兜底画像，
-     * 调用方需要结合该降级行为判断后续状态。
+     * 分析 JD 文本并生成岗位画像，支持按岗位大类兜底。
      *
      * @param jdText      JD 文本
      * @param jobCategory 岗位大类（如 TECH、PRODUCT），可为空
-     * @return 模型画像或按岗位大类生成的兜底画像，不返回 {@code null}
+     * @return 岗位画像数据
      */
     public PositionProfileData analyze(String jdText, String jobCategory) {
         return AgentContext.runAs(AgentType.JD_ANALYSIS, () -> {
-            // 1. 空正文不调用模型，直接按岗位大类生成可编辑画像。
             if (jdText == null || jdText.isBlank()) {
                 log.warn("[JdAnalysisAgent] JD 文本为空，返回兜底画像");
                 return fallbackProfile(jobCategory);
             }
 
-            // 2. 将 JD 与通用考察知识一起交给模型，补足原文未明确写出的面试方向。
             String userPrompt = String.format(USER_PROMPT_TEMPLATE, POSITION_KNOWLEDGE_BASE, jdText);
 
-            // 3. 模型异常、格式异常和核心内容为空都在本组件内降级，不中断上游解析流程。
             try {
                 String response = llmService.chat(SYSTEM_PROMPT, userPrompt);
                 PositionProfileData data = parseProfile(response);
@@ -152,12 +141,6 @@ public class JdAnalysisAgent {
         });
     }
 
-    /**
-     * 判断模型画像是否缺少可用于组织面试的核心内容。
-     *
-     * <p>仅必备技能、加分技能和考察方向三组数据参与判断；三者同时为空才视为空画像。
-     * 基本信息、面试重点和置信度即使有值，也不会改变这个判断结果。
-     */
     private boolean isEmptyProfile(PositionProfileData data) {
         if (data == null) {
             return true;
@@ -168,12 +151,6 @@ public class JdAnalysisAgent {
         return noSkills && noDirections;
     }
 
-    /**
-     * 从模型响应中提取并还原岗位画像，同时补齐上游依赖的默认字段。
-     *
-     * <p>缺失的基本信息、集合和置信度会分别补为空对象、空集合和 {@code 0.0}；响应无法解析时返回空画像，
-     * 随后由上层判空并切换到按岗位大类生成的兜底画像。
-     */
     private PositionProfileData parseProfile(String rawResponse) {
         String json = extractJson(rawResponse);
         try {
@@ -181,7 +158,7 @@ public class JdAnalysisAgent {
             if (data == null) {
                 return PositionProfileData.empty();
             }
-            // 将缺失字段统一为空对象或集合，避免上游在保存和展示画像时额外处理 null。
+            // 兜底空字段
             if (data.getBasicInfo() == null) data.setBasicInfo(new PositionProfileData.BasicInfo());
             if (data.getRequiredSkills() == null) data.setRequiredSkills(List.of());
             if (data.getPreferredSkills() == null) data.setPreferredSkills(List.of());
@@ -228,10 +205,7 @@ public class JdAnalysisAgent {
     }
 
     /**
-     * 按岗位大类生成可编辑的兜底画像。
-     *
-     * <p>技术、产品、运营和设计类分别填充面试重点与考察方向，未知类别使用通用内容；
-     * 基本信息和必备、加分技能仍保持为空，置信度保持 {@code 0.0}。上游会把该结果当作正常画像保存并交给用户确认。
+     * 按岗位大类生成兜底画像，LLM 失败时仍能给用户一个可编辑的基础画像。
      */
     private PositionProfileData fallbackProfile(String jobCategory) {
         PositionProfileData data = PositionProfileData.empty();

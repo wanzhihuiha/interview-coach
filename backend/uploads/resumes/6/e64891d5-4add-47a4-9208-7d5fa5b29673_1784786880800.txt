@@ -1,0 +1,21 @@
+姓名：张三
+性别：男
+年龄：28岁
+学历：本科
+工作年限：3年
+当前职位：Java后端开发工程师
+
+工作经历：
+2021.07-2024.07 某互联网公司 Java后端开发工程师
+- 负责公司电商核心系统后端开发，使用Spring Boot、MySQL、Redis、Kafka
+- 参与订单系统重构，QPS从500提升到5000
+- 设计并实现分布式锁方案，解决库存超卖问题
+
+项目经历：
+项目一：电商订单系统重构
+角色：核心开发
+技术栈：Spring Boot、MySQL、Redis、RocketMQ、Elasticsearch
+描述：负责订单创建、状态机、库存扣减等核心模块。引入Redis缓存和消息队列，系统性能提升10倍。
+
+技能清单：
+Java、Spring Boot、Spring Cloud、MySQL、Redis、Kafka、RocketMQ、Elasticsearch、Docker、Git
