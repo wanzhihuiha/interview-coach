@@ -1,0 +1,6 @@
+data:{"type":"thinking","content":"面试官正在思考..."}
+
+data:{"topicName":"","phase":"SELF_INTRO","type":"question","content":"你好张三，欢迎来到今天的面试！先别紧张，我们就像聊天一样开始吧。能简单聊聊你的工作背景吗？比如你之前主要负责哪些项目，在团队中通常扮演什么样的角色，以及你最擅长的技术领域有哪些？","depth":1,"topicId":""}
+
+data:{"type":"done"}
+

@@ -1,0 +1,152 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+# 多环境配置说明：
+# - 默认（default）：MySQL，适用于联调/生产
+# - local：H2 文件数据库，轻量本地开发（启动时加 --spring.profiles.active=local）
+# - test：H2 内存数据库，单元测试自动使用
+spring:
+  application:
+    name: interview-coach
+
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:interview_coach}?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      # 数据保留策略：未修改实体/表结构时，update 不会删除已有数据。
+      # 生产环境如需精确控制 schema 变更，建议后续引入 Flyway/Liquibase。
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
+      timeout: 5s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+  jackson:
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd HH:mm:ss
+    serialization:
+      write_dates_as_timestamps: false
+
+  ai:
+    # 关闭 Spring AI 自动配置，由 ChatClientFactory 手动创建 ChatClient，避免无 API Key 时启动失败
+    dashscope:
+      enabled: false
+    openai:
+      enabled: false
+
+app:
+  admin:
+    # 是否启动时自动初始化默认管理员账号（admin / Admin@1234）
+    init-enabled: true
+
+jwt:
+  secret: ${JWT_SECRET:please-change-this-secret-key-in-production}
+  expiration-days: ${JWT_EXPIRATION_DAYS:7}
+  # token 过期后的续期宽限期（分钟），用于面试等长会话不因 token 过期而中断
+  refresh-grace-minutes: ${JWT_REFRESH_GRACE_MINUTES:60}
+
+resume:
+  upload:
+    max-size: 10485760
+    storage-path: D:/trae_app_data/interview-coach/uploads/resumes
+  llm:
+    # 简历分析智能体 LLM 配置
+    # 默认关闭真实 LLM，使用 Mock 返回空画像；启用真实 LLM 时设置 enabled=true 并配置 vendors
+    enabled: false
+    # LLM 调用超时时间（秒）
+    timeout-seconds: 60
+    # 失败重试次数
+    retry-times: 1
+    # 模型生成参数
+    temperature: 0.3
+    max-tokens: 4096
+    top-p: 0.9
+    # 多厂商配置：可配置 api-key、base-url、model
+    vendors:
+      dashscope:
+        type: DASHSCOPE
+        enabled: false
+        api-key: ${DASHSCOPE_API_KEY:}
+        # base-url 留空表示使用 DashScope 默认地址
+        base-url:
+        model: qwen-plus
+      openai:
+        type: OPENAI_COMPATIBLE
+        enabled: false
+        api-key: ${OPENAI_API_KEY:}
+        base-url: https://api.openai.com
+        model: gpt-3.5-turbo
+      zhipu:
+        type: OPENAI_COMPATIBLE
+        enabled: false
+        api-key: ${ZHIPU_API_KEY:}
+        base-url: https://open.bigmodel.cn/api/paas/v4
+        model: glm-4
+    # 模型分层路由：primary / fallback 引用 vendor key，也可写成 "vendor:model" 覆盖默认模型
+    tiers:
+      l1:
+        # 轻量任务：格式化、简单分类
+        primary: dashscope
+        fallback: dashscope
+      l2:
+        # 标准任务：简历/JD 解析、画像生成
+        primary: dashscope
+        fallback: openai
+      l3:
+        # 高性能任务：深度推理、复杂评估
+        primary: dashscope
+        fallback: openai
+
+position:
+  upload:
+    max-size: 10485760
+    storage-path: D:/trae_app_data/interview-coach/uploads/positions
+
+# Agent 权限边界配置（P2）：支持通过 YAML 覆盖各 Tool 的允许调用 Agent。
+# 方法 key 规则为：声明类简单名.方法名，例如 LlmInterviewService.chat。
+# 未配置的方法使用 @AgentPermission 注解默认值；动态评估器始终生效。
+interview:
+  agent-permissions:
+    enabled: true
+    audit-log: true
+    deny-log: true
+    rules:
+      # 示例：面试核心 LLM 服务允许面试官、评估者、报告、教练、简历/JD 分析调用
+      "LlmInterviewService.chat":
+        - INTERVIEWER
+        - EVALUATOR
+        - REPORT
+        - COACH
+        - RESUME_ANALYSIS
+        - JD_ANALYSIS
+      # 示例：技能文档仅允许面试官访问
+      "SkillsTool.getSkillPrompt":
+        - INTERVIEWER
+
+logging:
+  level:
+    com.interviewcoach: INFO
+    org.springframework.security: WARN

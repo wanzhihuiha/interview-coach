@@ -1,0 +1,57 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    defer-datasource-initialization: true
+
+  ai:
+    dashscope:
+      enabled: false
+    openai:
+      enabled: false
+
+jwt:
+  secret: test-secret-key-for-unit-test-only
+  expiration-days: 1
+
+resume:
+  upload:
+    max-size: 10485760
+    storage-path: ./target/test-uploads/resumes
+  llm:
+    enabled: false
+    vendors:
+      dashscope:
+        type: DASHSCOPE
+        enabled: false
+        api-key: ${DASHSCOPE_API_KEY:}
+        model: qwen-plus
+      openai:
+        type: OPENAI_COMPATIBLE
+        enabled: false
+        api-key: ${OPENAI_API_KEY:}
+        base-url: https://api.openai.com
+        model: gpt-3.5-turbo
+      zhipu:
+        type: OPENAI_COMPATIBLE
+        enabled: false
+        api-key: ${ZHIPU_API_KEY:}
+        base-url: https://open.bigmodel.cn/api/paas/v4
+        model: glm-4
+    tiers:
+      l1:
+        primary: dashscope
+        fallback: dashscope
+      l2:
+        primary: dashscope
+        fallback: openai
+      l3:
+        primary: dashscope
+        fallback: openai

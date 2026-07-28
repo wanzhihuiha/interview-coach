@@ -1,0 +1,11 @@
+﻿姓名：张三
+电话：13800138000
+邮箱：zhangsan@example.com
+学历：本科，计算机科学与技术，北京大学，2018-2022
+工作经历：
+2022-2024 阿里巴巴 Java开发工程师
+- 负责微服务架构设计与开发
+- 使用Spring Boot、MySQL、Redis构建高并发系统
+- 优化接口性能，QPS提升200%
+
+技能：Java、Spring Boot、MySQL、Redis、Docker、Kubernetes
