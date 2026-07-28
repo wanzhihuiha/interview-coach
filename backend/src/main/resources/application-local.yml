@@ -74,7 +74,7 @@ resume:
         # 因此类型需设置为 ANTHROPIC_COMPATIBLE，base-url 以 /anthropic 结尾。
         type: ANTHROPIC_COMPATIBLE
         enabled: true
-        api-key: ${MINIMAX_API_KEY:sk-cp-otHoTax6lX0OVpAk8s5MzHtJRpxwTKuDURBDFSuX73hPYKLFD1CfJpwB-rINdRNqKh80vDqikGkFICAgokGRusLhZ2Vgwnby6v29ibnhUWQkW4nh6qdz7uI}
+        api-key: ${MINIMAX_API_KEY:your_api_key}
         base-url: https://api.minimaxi.com/anthropic
         model: MiniMax-M3
     tiers:
