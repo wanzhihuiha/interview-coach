@@ -1,0 +1,216 @@
+@use '@/styles/variables.scss' as *;
+
+.container {
+  min-height: 100vh;
+  background-color: $color-bg-page;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: $color-bg-card;
+  padding: $spacing-md $spacing-lg;
+  box-shadow: $shadow-card;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.headerTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.headerMeta {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  margin-top: 4rpx;
+  display: block;
+}
+
+.headerActions {
+  display: flex;
+  gap: $spacing-sm;
+}
+
+.actionText {
+  font-size: $font-size-sm;
+  color: $color-error;
+  padding: $spacing-xs $spacing-sm;
+}
+
+.successText {
+  color: $color-success;
+}
+
+.chatArea {
+  flex: 1;
+  padding: $spacing-lg;
+  overflow-y: auto;
+}
+
+.message {
+  display: flex;
+  margin-bottom: $spacing-lg;
+}
+
+.messageInterviewer {
+  justify-content: flex-start;
+}
+
+.messageCandidate {
+  justify-content: flex-end;
+}
+
+.avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: $radius-round;
+  background: $color-primary;
+  color: $color-text-white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  flex-shrink: 0;
+}
+
+.avatarCandidate {
+  background: $color-success;
+}
+
+.bubble {
+  max-width: 70%;
+  padding: $spacing-md;
+  border-radius: $radius-lg;
+  margin: 0 $spacing-md;
+  font-size: $font-size-md;
+  line-height: $line-height-loose;
+}
+
+.bubbleInterviewer {
+  background: $color-bg-card;
+  color: $color-text-primary;
+  box-shadow: $shadow-card;
+}
+
+.bubbleCandidate {
+  background: $color-primary;
+  color: $color-text-white;
+}
+
+.thinking {
+  color: $color-text-tertiary;
+  font-style: italic;
+}
+
+.inputArea {
+  background: $color-bg-card;
+  padding: $spacing-md $spacing-lg;
+  padding-bottom: calc($spacing-md + env(safe-area-inset-bottom));
+  box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 160rpx;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: $spacing-md;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  box-sizing: border-box;
+  margin-bottom: $spacing-md;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hint {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.submitBtn {
+  @include button-reset;
+  height: $button-height-md;
+  padding: 0 $spacing-xl;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-button;
+  color: $color-text-white;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+.phaseChangeMask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.phaseChangeCard {
+  width: 80%;
+  max-width: 560rpx;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-xl;
+  text-align: center;
+}
+
+.phaseIcon {
+  font-size: 80rpx;
+  margin-bottom: $spacing-md;
+}
+
+.phaseTitle {
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  margin-bottom: $spacing-sm;
+  display: block;
+}
+
+.phaseDesc {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+  margin-bottom: $spacing-lg;
+  display: block;
+}
+
+.phaseBtn {
+  @include button-reset;
+  width: 100%;
+  height: $button-height-md;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  border-radius: $radius-button;
+  color: $color-text-white;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

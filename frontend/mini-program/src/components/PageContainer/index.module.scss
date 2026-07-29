@@ -1,0 +1,11 @@
+@use '@/styles/variables.scss' as *;
+
+.container {
+  min-height: 100vh;
+  background-color: $color-bg-page;
+  box-sizing: border-box;
+}
+
+.withPadding {
+  padding: $spacing-lg;
+}

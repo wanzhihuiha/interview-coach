@@ -1,0 +1,13 @@
+@use '@/styles/variables.scss' as *;
+
+.card {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+  box-sizing: border-box;
+}
+
+.gradient {
+  background: linear-gradient(135deg, #ecf5ff 0%, #ffffff 100%);
+}
