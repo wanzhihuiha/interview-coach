@@ -56,6 +56,10 @@ CREATE DATABASE interview_coach
   COLLATE utf8mb4_unicode_ci;
 ```
 
+After creating the database, manually execute
+`backend/src/main/resources/db/migration/V1__init_schema.sql` to create all tables required by the current version,
+then start the backend. Hibernate only validates the entity mappings and never creates or modifies the schema automatically.
+
 The backend reads the following environment variables. Set them for your local environment, and never commit real passwords or secrets to the repository.
 
 | Environment variable | Required | Description |
@@ -109,6 +113,15 @@ Open `http://localhost:5173`. The development server proxies `/api` requests to 
 ## Local Profile Notes
 
 `backend/src/main/resources/application-local.yml` uses an H2 file database, but it currently contains machine-specific absolute paths and enables a specific model configuration. Before using the `local` profile, replace the database and upload paths with writable paths on your machine, then verify the model switches and API key configuration.
+
+## Database Schema Management
+
+- Manually executed versioned SQL manages the MySQL schema. Scripts are stored in `backend/src/main/resources/db/migration/`.
+- Run `V1__init_schema.sql` for initial setup. Add and manually run `V2__...sql`, `V3__...sql`, and later versions for subsequent changes.
+- Never edit an applied SQL file, and record the latest applied version in deployment records.
+- The default profile uses `spring.jpa.hibernate.ddl-auto=validate`, so Hibernate only validates the schema.
+- `backend/src/main/resources/db/schema.sql` is a deprecation notice for the old entry point and is not executed.
+- The `local` and `test` profiles use H2 and retain their existing `update` and `create-drop` strategies.
 
 ## Verification
 

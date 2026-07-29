@@ -1,6 +1,11 @@
 # 数据库设计文档
 
 > 本文档记录 interview-coach 项目的数据库设计，包括 ER 图、表结构、索引策略、DDL 脚本。
+>
+> **现状说明：**本文档中的前缀表名和 DDL 保留的是早期设计方案，与当前实体并不完全一致。
+> 当前可执行、受版本管理的 MySQL 基线以
+> `backend/src/main/resources/db/migration/V1__init_schema.sql` 为准；该脚本由维护者手工执行，
+> 后续结构变化通过新的版本化 SQL 演进。
 
 ---
 

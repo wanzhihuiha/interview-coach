@@ -56,6 +56,10 @@ CREATE DATABASE interview_coach
   COLLATE utf8mb4_unicode_ci;
 ```
 
+数据库创建完成后，先手工执行
+`backend/src/main/resources/db/migration/V1__init_schema.sql`，创建当前版本所需的全部表，
+再启动后端。Hibernate 仅校验实体与表结构是否一致，不会自动创建或修改数据库结构。
+
 后端默认读取以下环境变量。请根据本机环境设置，不要将真实密码或密钥提交到仓库。
 
 | 环境变量 | 是否必需 | 说明 |
@@ -109,6 +113,15 @@ npm run dev
 ## 本地配置说明
 
 `backend/src/main/resources/application-local.yml` 使用 H2 文件数据库，但当前包含开发机绝对路径，并启用了特定模型配置。使用 `local` Profile 前，请先将数据库和上传目录改为本机可写路径，并确认模型开关与 API Key 配置。
+
+## 数据库结构管理
+
+- MySQL 表结构由人工执行的版本化 SQL 管理，脚本位于 `backend/src/main/resources/db/migration/`。
+- 首次初始化执行 `V1__init_schema.sql`；后续结构变化新增并按顺序手工执行 `V2__...sql`、`V3__...sql`。
+- 已执行过的 SQL 文件不得修改，并应在部署记录中登记数据库已执行到的版本。
+- 默认配置使用 `spring.jpa.hibernate.ddl-auto=validate`，启动时只校验表结构。
+- `backend/src/main/resources/db/schema.sql` 是旧入口的废弃提示，不参与初始化。
+- `local` 和 `test` Profile 使用 H2，分别由现有 `update` 和 `create-drop` 策略管理。
 
 ## 验证
 
