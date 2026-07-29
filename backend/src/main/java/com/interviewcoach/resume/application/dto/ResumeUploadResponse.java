@@ -15,5 +15,6 @@ public class ResumeUploadResponse {
     private Long resumeId;
     private String fileName;
     private String status;
+    private String statusLabel;
     private Integer parseProgress;
 }

@@ -146,10 +146,14 @@ public class InterviewService {
         CreateInterviewResponse response = new CreateInterviewResponse();
         response.setInterviewId(interview.getId());
         response.setStatus(interview.getStatus().name());
-        response.setSelectedPhases(selectedPhases.stream().map(InterviewPhase::name).toList());
+        response.setStatusLabel(interview.getStatus().getDisplayName());
+        List<String> phaseCodes = selectedPhases.stream().map(InterviewPhase::name).toList();
+        response.setSelectedPhases(phaseCodes);
         response.setCurrentPhase(interview.getCurrentPhase().name());
+        response.setCurrentPhaseLabel(interview.getCurrentPhase().getDisplayName());
         response.setFirstQuestion(firstQuestion);
-        response.setPhaseOrder(selectedPhases.stream().map(InterviewPhase::name).toList());
+        response.setPhaseOrder(phaseCodes);
+        response.setPhaseLabels(toPhaseLabels(phaseCodes));
         return response;
     }
 
@@ -288,6 +292,7 @@ public class InterviewService {
         for (InterviewPhase phase : InterviewPhase.values()) {
             long count = messages.stream().filter(m -> m.getPhase().equals(phase.name()) && "interviewer".equals(m.getRole())).count();
             InterviewReportResponse.PhaseSummary summary = new InterviewReportResponse.PhaseSummary();
+            summary.setPhaseLabel(phase.getDisplayName());
             summary.setQuestionCount((int) count);
             summary.setCompleted(phase == InterviewPhase.ENDING || interview.getCurrentPhase().getOrder() > phase.getOrder());
             phases.put(phase.name(), summary);
@@ -349,7 +354,9 @@ public class InterviewService {
         md.append("|---|---|---|\n");
         for (Map.Entry<String, InterviewReportResponse.PhaseSummary> entry : report.getPhases().entrySet()) {
             InterviewReportResponse.PhaseSummary summary = entry.getValue();
-            md.append("| ").append(entry.getKey()).append(" | ")
+            String phaseLabel = summary.getPhaseLabel() != null
+                    ? summary.getPhaseLabel() : InterviewPhase.displayNameOf(entry.getKey());
+            md.append("| ").append(phaseLabel).append(" | ")
                     .append(summary.getQuestionCount()).append(" | ")
                     .append(Boolean.TRUE.equals(summary.getCompleted()) ? "已完成" : "未完成").append(" |\n");
         }
@@ -455,11 +462,15 @@ public class InterviewService {
         response.setResumeId(interview.getResumeId());
         response.setPositionId(interview.getPositionId());
         response.setStatus(interview.getStatus().name());
+        response.setStatusLabel(interview.getStatus().getDisplayName());
         response.setCurrentPhase(interview.getCurrentPhase().name());
+        response.setCurrentPhaseLabel(interview.getCurrentPhase().getDisplayName());
         response.setCurrentTopic(interview.getCurrentTopicName());
         response.setCurrentDepth(interview.getCurrentDepth());
         response.setTotalQuestionCount(interview.getTotalQuestionCount());
-        response.setSelectedPhases(parsePhasesJson(interview.getSelectedPhases()));
+        List<String> selectedPhases = parsePhasesJson(interview.getSelectedPhases());
+        response.setSelectedPhases(selectedPhases);
+        response.setPhaseLabels(toPhaseLabels(selectedPhases));
         response.setPendingQuestion(interview.getPendingQuestion());
         response.setStartedAt(interview.getStartedAt());
         response.setEndedAt(interview.getEndedAt());
@@ -486,6 +497,7 @@ public class InterviewService {
         InterviewMessageResponse response = new InterviewMessageResponse();
         response.setMessageId(message.getId());
         response.setPhase(message.getPhase());
+        response.setPhaseLabel(InterviewPhase.displayNameOf(message.getPhase()));
         response.setRole(message.getRole());
         response.setContent(message.getContent());
         response.setTopic(message.getTopicName());
@@ -507,6 +519,14 @@ public class InterviewService {
         } catch (JsonProcessingException e) {
             return new ArrayList<>();
         }
+    }
+
+    private Map<String, String> toPhaseLabels(List<String> phaseCodes) {
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (String phaseCode : phaseCodes) {
+            labels.put(phaseCode, InterviewPhase.displayNameOf(phaseCode));
+        }
+        return labels;
     }
 
     private String toJson(Object obj) {
@@ -599,9 +619,14 @@ public class InterviewService {
         response.setInterviewId(entity.getInterviewId());
         response.setOverallScore(entity.getOverallScore());
         response.setGrade(entity.getGrade());
-        response.setPhases(parseJson(entity.getPhases(),
+        Map<String, InterviewReportResponse.PhaseSummary> phases = parseJson(entity.getPhases(),
                 new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, InterviewReportResponse.PhaseSummary>>() {
-                }));
+                });
+        if (phases == null) {
+            phases = new LinkedHashMap<>();
+        }
+        phases.forEach((phaseCode, summary) -> summary.setPhaseLabel(InterviewPhase.displayNameOf(phaseCode)));
+        response.setPhases(phases);
         response.setDimensions(parseJson(entity.getDimensions(), InterviewReportResponse.DimensionScores.class));
         response.setStrengths(parseJson(entity.getStrengths(),
                 new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {

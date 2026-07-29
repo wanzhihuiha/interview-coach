@@ -7,35 +7,45 @@ public enum AgentType {
     /**
      * 面试官 Agent：负责生成面试问题。
      */
-    INTERVIEWER,
+    INTERVIEWER("面试官"),
 
     /**
      * 评估者 Agent：负责评估候选人回答。
      */
-    EVALUATOR,
+    EVALUATOR("回答评估"),
 
     /**
      * 协调者 Agent：负责调度各环节 Skill。
      */
-    COORDINATOR,
+    COORDINATOR("流程协调"),
 
     /**
      * 报告 Agent：负责生成面试评估报告。
      */
-    REPORT,
+    REPORT("报告生成"),
 
     /**
      * 教练 Agent：负责生成成长方案。
      */
-    COACH,
+    COACH("成长教练"),
 
     /**
      * 简历分析 Agent：负责解析简历文本。
      */
-    RESUME_ANALYSIS,
+    RESUME_ANALYSIS("简历分析"),
 
     /**
      * JD 分析 Agent：负责解析岗位描述。
      */
-    JD_ANALYSIS
+    JD_ANALYSIS("岗位分析");
+
+    private final String displayName;
+
+    AgentType(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
 }

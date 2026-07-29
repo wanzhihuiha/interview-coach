@@ -23,6 +23,7 @@ public class InterviewReportResponse {
 
     @Data
     public static class PhaseSummary {
+        private String phaseLabel;
         private Boolean completed;
         private Integer questionCount;
     }

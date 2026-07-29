@@ -81,9 +81,11 @@ public class AuditLogAdminService {
         AuditLogItemResponse item = new AuditLogItemResponse();
         item.setId(record.getId());
         item.setCaller(record.getCaller() != null ? record.getCaller().name() : null);
+        item.setCallerLabel(record.getCaller() != null ? record.getCaller().getDisplayName() : null);
         item.setOperation(record.getOperation());
         item.setMethodKey(record.getMethodKey());
         item.setStatus(record.getStatus() != null ? record.getStatus().name() : null);
+        item.setStatusLabel(record.getStatus() != null ? record.getStatus().getDisplayName() : null);
         item.setDurationMs(record.getDurationMs());
         item.setArgsSummary(record.getArgsSummary());
         item.setResultSummary(record.getResultSummary());

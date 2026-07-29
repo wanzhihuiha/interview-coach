@@ -10,6 +10,7 @@ public class InterviewMessageResponse {
 
     private Long messageId;
     private String phase;
+    private String phaseLabel;
     private String role;
     private String content;
     private String topic;

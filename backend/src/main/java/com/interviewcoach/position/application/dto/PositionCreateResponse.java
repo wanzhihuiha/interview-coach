@@ -15,5 +15,7 @@ public class PositionCreateResponse {
     private Long positionId;
     private String positionName;
     private String parseStatus;
+    private String parseStatusLabel;
     private String auditStatus;
+    private String auditStatusLabel;
 }

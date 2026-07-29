@@ -91,8 +91,18 @@ public class AgentAuditLogRecord {
      * 审计状态枚举。
      */
     public enum AuditStatus {
-        ALLOWED,
-        DENIED,
-        FAILED
+        ALLOWED("允许"),
+        DENIED("拒绝"),
+        FAILED("失败");
+
+        private final String displayName;
+
+        AuditStatus(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
     }
 }

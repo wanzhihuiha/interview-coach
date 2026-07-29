@@ -15,7 +15,9 @@ public class UserAdminListItemResponse {
     private String phone;
     private String email;
     private String status;
+    private String statusLabel;
     private List<String> roles;
+    private List<String> roleLabels;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

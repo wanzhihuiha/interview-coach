@@ -10,7 +10,9 @@ public class QuestionBankItem {
 
     private Long id;
     private String jobCategory;
+    private String jobCategoryLabel;
     private String phase;
+    private String phaseLabel;
     private String topicId;
     private String topicName;
     private String content;

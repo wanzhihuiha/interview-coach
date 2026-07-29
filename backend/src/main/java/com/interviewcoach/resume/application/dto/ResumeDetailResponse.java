@@ -15,7 +15,9 @@ public class ResumeDetailResponse {
     private String fileType;
     private Long fileSize;
     private String status;
+    private String statusLabel;
     private String jobCategory;
+    private String jobCategoryLabel;
     private UserProfileData parsedData;
     private LocalDateTime createdAt;
     private LocalDateTime confirmedAt;

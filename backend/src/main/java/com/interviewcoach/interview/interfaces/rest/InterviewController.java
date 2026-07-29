@@ -81,7 +81,9 @@ public class InterviewController {
                 sendEvent(emitter, Map.of(
                         "type", "phaseChange",
                         "previousPhase", result.getPreviousPhase().name(),
-                        "currentPhase", result.getPhase().name()
+                        "previousPhaseLabel", result.getPreviousPhase().getDisplayName(),
+                        "currentPhase", result.getPhase().name(),
+                        "currentPhaseLabel", result.getPhase().getDisplayName()
                 ));
             }
 
@@ -89,6 +91,7 @@ public class InterviewController {
                     "type", "question",
                     "content", result.getQuestion(),
                     "phase", result.getPhase().name(),
+                    "phaseLabel", result.getPhase().getDisplayName(),
                     "depth", result.getDepth() == null ? 1 : result.getDepth(),
                     "topicId", result.getTopicId() == null ? "" : result.getTopicId(),
                     "topicName", result.getTopicName() == null ? "" : result.getTopicName()

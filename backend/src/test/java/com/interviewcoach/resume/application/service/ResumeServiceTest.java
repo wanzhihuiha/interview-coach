@@ -60,6 +60,8 @@ class ResumeServiceTest {
 
         assertThat(response.getContent()).hasSize(2);
         assertThat(response.getTotalElements()).isEqualTo(2);
+        assertThat(response.getContent()).allSatisfy(item ->
+                assertThat(item.getJobCategoryLabel()).isEqualTo("技术类"));
     }
 
     @Test
@@ -78,6 +80,8 @@ class ResumeServiceTest {
         ResumeDetailResponse detail = resumeService.getResumeDetail(userId, resume.getId());
 
         assertThat(detail.getFileName()).isEqualTo("简历1.pdf");
+        assertThat(detail.getStatusLabel()).isEqualTo("待确认");
+        assertThat(detail.getJobCategoryLabel()).isEqualTo("技术类");
         assertThat(detail.getParsedData()).isNotNull();
         assertThat(detail.getParsedData().getSkillTags()).containsExactly("Java", "Spring Boot");
     }
@@ -131,6 +135,8 @@ class ResumeServiceTest {
         assertThat(response.getProfile()).isNotNull();
         assertThat(response.getProfile().getSkillTags()).containsExactly("MySQL");
         assertThat(response.getExperienceLevel()).isEqualTo("JUNIOR");
+        assertThat(response.getExperienceLevelLabel()).isEqualTo("初级");
+        assertThat(response.getStatusLabel()).isEqualTo("已确认");
     }
 
     @Test
@@ -174,6 +180,7 @@ class ResumeServiceTest {
         resume.setFileSize(1024L);
         resume.setFilePath("/tmp/" + name);
         resume.setParseStatus(status);
+        resume.setJobCategory("TECH");
         return resumeRepository.save(resume);
     }
 }

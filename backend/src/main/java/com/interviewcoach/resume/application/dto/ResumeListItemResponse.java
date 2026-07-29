@@ -12,7 +12,9 @@ public class ResumeListItemResponse {
     private Long resumeId;
     private String fileName;
     private String status;
+    private String statusLabel;
     private String jobCategory;
+    private String jobCategoryLabel;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

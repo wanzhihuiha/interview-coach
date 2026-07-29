@@ -2,10 +2,12 @@ package com.interviewcoach.admin.question.application.service;
 
 import static com.interviewcoach.interview.application.service.QuestionBankErrorCode.*;
 
+import com.interviewcoach.common.domain.JobCategoryType;
 import com.interviewcoach.interview.application.dto.QuestionBankItem;
 import com.interviewcoach.interview.application.dto.QuestionBankListResponse;
 import com.interviewcoach.common.exception.BusinessException;
 import com.interviewcoach.interview.domain.entity.PermanentQuestionBank;
+import com.interviewcoach.interview.domain.entity.InterviewPhase;
 import com.interviewcoach.interview.domain.entity.TemporaryQuestionBank;
 import com.interviewcoach.interview.domain.repository.PermanentQuestionBankRepository;
 import com.interviewcoach.interview.domain.repository.TemporaryQuestionBankRepository;
@@ -147,7 +149,9 @@ public class QuestionBankAdminService {
         QuestionBankItem item = new QuestionBankItem();
         item.setId(entity.getId());
         item.setJobCategory(entity.getJobCategory());
+        item.setJobCategoryLabel(JobCategoryType.displayNameOf(entity.getJobCategory()));
         item.setPhase(entity.getPhase());
+        item.setPhaseLabel(InterviewPhase.displayNameOf(entity.getPhase()));
         item.setTopicId(entity.getTopicId());
         item.setTopicName(entity.getTopicName());
         item.setContent(entity.getContent());
@@ -160,7 +164,9 @@ public class QuestionBankAdminService {
         QuestionBankItem item = new QuestionBankItem();
         item.setId(entity.getId());
         item.setJobCategory(entity.getJobCategory());
+        item.setJobCategoryLabel(JobCategoryType.displayNameOf(entity.getJobCategory()));
         item.setPhase(entity.getPhase());
+        item.setPhaseLabel(InterviewPhase.displayNameOf(entity.getPhase()));
         item.setTopicId(entity.getTopicId());
         item.setTopicName(entity.getTopicName());
         item.setContent(entity.getContent());

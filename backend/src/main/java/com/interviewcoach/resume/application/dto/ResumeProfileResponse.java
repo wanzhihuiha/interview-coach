@@ -13,5 +13,7 @@ public class ResumeProfileResponse {
     private Long resumeId;
     private UserProfileData profile;
     private String experienceLevel;
+    private String experienceLevelLabel;
     private String status;
+    private String statusLabel;
 }

@@ -2,6 +2,7 @@ package com.interviewcoach.interview.domain.entity;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
@@ -28,6 +29,20 @@ public enum InterviewPhase {
 
     public int getOrder() {
         return order;
+    }
+
+    /**
+     * 将环节编码转换为中文；未知值保持原样以兼容历史题库数据。
+     */
+    public static String displayNameOf(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return valueOf(value.trim().toUpperCase(Locale.ROOT)).getDisplayName();
+        } catch (IllegalArgumentException e) {
+            return value;
+        }
     }
 
     /**

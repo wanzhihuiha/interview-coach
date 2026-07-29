@@ -4,8 +4,10 @@ import static com.interviewcoach.resume.application.service.ResumeErrorCode.*;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.interviewcoach.common.domain.JobCategoryType;
 import com.interviewcoach.common.exception.BusinessException;
 import com.interviewcoach.resume.domain.agent.ResumeAnalysisAgent;
+import com.interviewcoach.resume.domain.entity.ExperienceLevel;
 import com.interviewcoach.resume.domain.entity.Resume;
 import com.interviewcoach.resume.domain.entity.ResumeParseStatus;
 import com.interviewcoach.resume.domain.entity.ResumeProfile;
@@ -76,7 +78,8 @@ public class ResumeService {
         parseResumeAsync(resume.getId(), userId);
 
         return new com.interviewcoach.resume.application.dto.ResumeUploadResponse(
-                resume.getId(), resume.getResumeName(), resume.getParseStatus().name(), 0);
+                resume.getId(), resume.getResumeName(), resume.getParseStatus().name(),
+                resume.getParseStatus().getDisplayName(), 0);
     }
 
     /**
@@ -166,7 +169,9 @@ public class ResumeService {
         response.setFileType(resume.getFileType());
         response.setFileSize(resume.getFileSize());
         response.setStatus(resume.getParseStatus().name());
+        response.setStatusLabel(resume.getParseStatus().getDisplayName());
         response.setJobCategory(resume.getJobCategory());
+        response.setJobCategoryLabel(JobCategoryType.displayNameOf(resume.getJobCategory()));
         response.setCreatedAt(resume.getCreatedAt());
         response.setConfirmedAt(resume.getParseStatus() == ResumeParseStatus.CONFIRMED ? resume.getUpdatedAt() : null);
 
@@ -189,7 +194,9 @@ public class ResumeService {
         response.setResumeId(profile.getResumeId());
         response.setProfile(parseProfileJson(profile.getProfileData()));
         response.setExperienceLevel(profile.getExperienceLevel());
+        response.setExperienceLevelLabel(ExperienceLevel.displayNameOf(profile.getExperienceLevel()));
         response.setStatus(resume.getParseStatus().name());
+        response.setStatusLabel(resume.getParseStatus().getDisplayName());
         return response;
     }
 
@@ -231,7 +238,8 @@ public class ResumeService {
         parseResumeAsync(resume.getId(), userId);
 
         return new com.interviewcoach.resume.application.dto.ResumeUploadResponse(
-                resume.getId(), resume.getResumeName(), resume.getParseStatus().name(), 0);
+                resume.getId(), resume.getResumeName(), resume.getParseStatus().name(),
+                resume.getParseStatus().getDisplayName(), 0);
     }
 
     /**
@@ -312,7 +320,9 @@ public class ResumeService {
         item.setResumeId(resume.getId());
         item.setFileName(resume.getResumeName());
         item.setStatus(resume.getParseStatus().name());
+        item.setStatusLabel(resume.getParseStatus().getDisplayName());
         item.setJobCategory(resume.getJobCategory());
+        item.setJobCategoryLabel(JobCategoryType.displayNameOf(resume.getJobCategory()));
         item.setCreatedAt(resume.getCreatedAt());
         item.setUpdatedAt(resume.getUpdatedAt());
         return item;

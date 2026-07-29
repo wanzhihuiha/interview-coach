@@ -13,10 +13,14 @@ public class PositionListItemResponse {
     private String positionName;
     private String companyName;
     private String jobCategory;
+    private String jobCategoryLabel;
     private String level;
+    private String levelLabel;
     private String jdContent;
     private String parseStatus;
+    private String parseStatusLabel;
     private String auditStatus;
+    private String auditStatusLabel;
     private Boolean isPublic;
     private Long userId;
     private LocalDateTime createdAt;

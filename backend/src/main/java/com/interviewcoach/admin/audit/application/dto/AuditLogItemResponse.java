@@ -11,9 +11,11 @@ public class AuditLogItemResponse {
 
     private Long id;
     private String caller;
+    private String callerLabel;
     private String operation;
     private String methodKey;
     private String status;
+    private String statusLabel;
     private Long durationMs;
     private String argsSummary;
     private String resultSummary;

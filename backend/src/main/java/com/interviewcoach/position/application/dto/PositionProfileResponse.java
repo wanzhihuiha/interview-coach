@@ -13,4 +13,5 @@ public class PositionProfileResponse {
     private Long positionId;
     private PositionProfileData profile;
     private String parseStatus;
+    private String parseStatusLabel;
 }

@@ -1,25 +1,19 @@
-package com.interviewcoach.user.domain.entity;
+package com.interviewcoach.position.domain.entity;
 
 import java.util.Locale;
 
 /**
- * 用户角色枚举。
+ * 岗位职级编码及中文名称。
  */
-public enum UserRole {
-
-    /**
-     * 普通用户。
-     */
-    USER("普通用户"),
-
-    /**
-     * 管理员，可审核临时题库、管理岗位等。
-     */
-    ADMIN("管理员");
+public enum PositionLevel {
+    JUNIOR("初级"),
+    MID("中级"),
+    SENIOR("高级"),
+    EXPERT("专家");
 
     private final String displayName;
 
-    UserRole(String displayName) {
+    PositionLevel(String displayName) {
         this.displayName = displayName;
     }
 
@@ -27,6 +21,9 @@ public enum UserRole {
         return displayName;
     }
 
+    /**
+     * 将岗位职级编码转换为中文；模型已返回中文或未知值时保持原样。
+     */
     public static String displayNameOf(String value) {
         if (value == null || value.isBlank()) {
             return null;

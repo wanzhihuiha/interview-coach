@@ -4,6 +4,7 @@ import static com.interviewcoach.position.application.service.PositionErrorCode.
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.interviewcoach.common.domain.JobCategoryType;
 import com.interviewcoach.common.exception.BusinessException;
 import com.interviewcoach.position.application.dto.AuditPositionRequest;
 import com.interviewcoach.position.application.dto.ConfirmPositionRequest;
@@ -18,6 +19,7 @@ import com.interviewcoach.position.domain.entity.Position;
 import com.interviewcoach.position.domain.entity.PositionAuditStatus;
 import com.interviewcoach.position.domain.entity.PositionParseStatus;
 import com.interviewcoach.position.domain.entity.PositionProfile;
+import com.interviewcoach.position.domain.entity.PositionLevel;
 import com.interviewcoach.position.domain.model.PositionProfileData;
 import com.interviewcoach.position.domain.repository.PositionProfileRepository;
 import com.interviewcoach.position.domain.repository.PositionRepository;
@@ -94,7 +96,8 @@ public class PositionService {
 
         return new PositionCreateResponse(
                 position.getId(), position.getPositionName(),
-                position.getParseStatus().name(), position.getAuditStatus().name());
+                position.getParseStatus().name(), position.getParseStatus().getDisplayName(),
+                position.getAuditStatus().name(), position.getAuditStatus().getDisplayName());
     }
 
     /**
@@ -124,7 +127,8 @@ public class PositionService {
 
         return new PositionCreateResponse(
                 position.getId(), position.getPositionName(),
-                position.getParseStatus().name(), position.getAuditStatus().name());
+                position.getParseStatus().name(), position.getParseStatus().getDisplayName(),
+                position.getAuditStatus().name(), position.getAuditStatus().getDisplayName());
     }
 
     /**
@@ -317,6 +321,7 @@ public class PositionService {
         PositionProfileResponse response = new PositionProfileResponse();
         response.setPositionId(positionId);
         response.setParseStatus(position.getParseStatus().name());
+        response.setParseStatusLabel(position.getParseStatus().getDisplayName());
 
         PositionProfile profile = positionProfileRepository.findByPositionId(positionId).orElse(null);
         if (profile == null) {
@@ -372,7 +377,8 @@ public class PositionService {
 
         return new PositionCreateResponse(
                 position.getId(), position.getPositionName(),
-                position.getParseStatus().name(), position.getAuditStatus().name());
+                position.getParseStatus().name(), position.getParseStatus().getDisplayName(),
+                position.getAuditStatus().name(), position.getAuditStatus().getDisplayName());
     }
 
     /**
@@ -478,10 +484,14 @@ public class PositionService {
         item.setPositionName(position.getPositionName());
         item.setCompanyName(position.getCompanyName());
         item.setJobCategory(position.getJobCategory());
+        item.setJobCategoryLabel(JobCategoryType.displayNameOf(position.getJobCategory()));
         item.setLevel(position.getLevel());
+        item.setLevelLabel(PositionLevel.displayNameOf(position.getLevel()));
         item.setJdContent(position.getJdContent());
         item.setParseStatus(position.getParseStatus().name());
+        item.setParseStatusLabel(position.getParseStatus().getDisplayName());
         item.setAuditStatus(position.getAuditStatus().name());
+        item.setAuditStatusLabel(position.getAuditStatus().getDisplayName());
         item.setIsPublic(position.getIsPublic());
         item.setUserId(position.getUserId());
         item.setCreatedAt(position.getCreatedAt());
@@ -497,10 +507,14 @@ public class PositionService {
         response.setLocation(position.getLocation());
         response.setSalaryRange(position.getSalaryRange());
         response.setJobCategory(position.getJobCategory());
+        response.setJobCategoryLabel(JobCategoryType.displayNameOf(position.getJobCategory()));
         response.setLevel(position.getLevel());
+        response.setLevelLabel(PositionLevel.displayNameOf(position.getLevel()));
         response.setJdContent(position.getJdContent());
         response.setParseStatus(position.getParseStatus().name());
+        response.setParseStatusLabel(position.getParseStatus().getDisplayName());
         response.setAuditStatus(position.getAuditStatus().name());
+        response.setAuditStatusLabel(position.getAuditStatus().getDisplayName());
         response.setIsPublic(position.getIsPublic());
         response.setUserId(position.getUserId());
         response.setCreatedAt(position.getCreatedAt());
