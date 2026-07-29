@@ -625,20 +625,28 @@ public class InterviewService {
         if (phases == null) {
             phases = new LinkedHashMap<>();
         }
-        phases.forEach((phaseCode, summary) -> summary.setPhaseLabel(InterviewPhase.displayNameOf(phaseCode)));
+        phases.replaceAll((phaseCode, summary) -> {
+            InterviewReportResponse.PhaseSummary normalized = summary == null
+                    ? new InterviewReportResponse.PhaseSummary() : summary;
+            normalized.setPhaseLabel(InterviewPhase.displayNameOf(phaseCode));
+            return normalized;
+        });
         response.setPhases(phases);
         response.setDimensions(parseJson(entity.getDimensions(), InterviewReportResponse.DimensionScores.class));
-        response.setStrengths(parseJson(entity.getStrengths(),
+        List<String> strengths = parseJson(entity.getStrengths(),
                 new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
-                }));
-        response.setWeaknesses(parseJson(entity.getWeaknesses(),
+                });
+        response.setStrengths(strengths == null ? List.of() : strengths);
+        List<String> weaknesses = parseJson(entity.getWeaknesses(),
                 new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
-                }));
-        response.setKeyEvents(parseJson(entity.getKeyEvents(),
+                });
+        response.setWeaknesses(weaknesses == null ? List.of() : weaknesses);
+        List<String> keyEvents = parseJson(entity.getKeyEvents(),
                 new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
-                }));
+                });
+        response.setKeyEvents(keyEvents == null ? List.of() : keyEvents);
         response.setConclusion(entity.getConclusion());
-        response.setMdContent(entity.getMdContent());
+        response.setMdContent(buildReportMarkdown(response));
         return response;
     }
 
