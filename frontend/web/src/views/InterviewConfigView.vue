@@ -48,7 +48,7 @@
                 class="selection-item"
               >
                 <div class="selection-name">{{ position.positionName }}</div>
-                <div class="selection-meta">{{ position.companyName }} · {{ position.jobCategory }}</div>
+                <div class="selection-meta">{{ position.companyName }} · {{ position.jobCategoryLabel || '岗位类别待识别' }}</div>
               </el-radio>
             </el-radio-group>
           </el-card>

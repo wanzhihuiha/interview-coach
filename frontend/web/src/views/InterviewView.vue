@@ -101,14 +101,6 @@ import { getInterview, getInterviewMessages, submitAnswer, endInterview } from '
 import { ensureTokenFresh } from '@/api/auth'
 import type { InterviewSession, InterviewMessage } from '@/types'
 
-const PHASE_NAMES: Record<string, string> = {
-  SELF_INTRO: '自我介绍',
-  PROFESSIONAL: '专业面试',
-  RESUME_DISCUSSION: '简历探讨',
-  BEHAVIORAL: '行为面试',
-  ENDING: '结束'
-}
-
 const route = useRoute()
 const router = useRouter()
 const interviewId = Number(route.params.id)
@@ -192,10 +184,6 @@ function typewriter(text: string) {
   }, 500)
 }
 
-function phaseKeyToName(phase?: string) {
-  return phase ? PHASE_NAMES[phase] || phase : ''
-}
-
 function normalizePhaseKey(phase: string): string {
   switch (phase) {
     case 'SELF_INTRO': return 'intro'
@@ -235,8 +223,8 @@ async function handleSubmit() {
         thinking.value = true
         break
       case 'phaseChange':
-        previousPhaseName.value = phaseKeyToName(event.previousPhase)
-        nextPhaseName.value = phaseKeyToName(event.currentPhase)
+        previousPhaseName.value = event.previousPhaseLabel || '上一环节'
+        nextPhaseName.value = event.currentPhaseLabel || '下一环节'
         if (event.currentPhase) {
           updateSessionPhase(event.currentPhase)
         }
@@ -247,6 +235,7 @@ async function handleSubmit() {
           messages.value.push({
             messageId: Date.now(),
             phase: event.phase || session.value!.currentPhase || '',
+            phaseLabel: event.phaseLabel,
             role: 'interviewer',
             content: event.content,
             topic: event.topicName,

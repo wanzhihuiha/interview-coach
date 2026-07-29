@@ -7,10 +7,14 @@ export interface PositionListItem {
   positionName: string
   companyName?: string
   jobCategory: string
+  jobCategoryLabel?: string
   level?: string
+  levelLabel?: string
   location?: string
   parseStatus: string
+  parseStatusLabel?: string
   auditStatus: string
+  auditStatusLabel?: string
   isPublic?: boolean
   userId?: number
   createdAt?: string
@@ -34,9 +38,11 @@ export interface AdminDashboardStats {
 export interface AuditLogItem {
   id: number
   caller: string
+  callerLabel?: string
   operation: string
   methodKey: string
   status: string
+  statusLabel?: string
   durationMs: number
   argsSummary?: string
   resultSummary?: string
@@ -57,7 +63,9 @@ export interface UserListItem {
   phone?: string
   email?: string
   status: string
+  statusLabel?: string
   roles: string[]
+  roleLabels?: string[]
   createTime?: string
   updateTime?: string
 }
@@ -72,7 +80,9 @@ export interface UserListResponse {
 export interface QuestionBankItem {
   id: number
   jobCategory: string
+  jobCategoryLabel?: string
   phase: string
+  phaseLabel?: string
   topicId?: string
   topicName?: string
   content: string

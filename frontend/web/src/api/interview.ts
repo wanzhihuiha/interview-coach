@@ -5,7 +5,6 @@ import type {
   ApiResponse,
   InterviewSession,
   InterviewPhase,
-  InterviewQuestion,
   InterviewReport,
   GrowthPlan,
   CreateInterviewResponse,
@@ -14,12 +13,12 @@ import type {
   InterviewReportDto
 } from '@/types'
 
-const PHASE_META: Record<string, { key: string; name: string; description: string; questionCount: number }> = {
-  SELF_INTRO: { key: 'intro', name: '自我介绍', description: '热身放松，了解基本信息', questionCount: 1 },
-  PROFESSIONAL: { key: 'professional', name: '专业面试', description: '深度提问，考察专业技能', questionCount: 8 },
-  RESUME_DISCUSSION: { key: 'resume', name: '简历探讨', description: '项目追问，深入了解项目经历', questionCount: 3 },
-  BEHAVIORAL: { key: 'behavior', name: '行为面试', description: 'STAR问题，考察软技能', questionCount: 4 },
-  ENDING: { key: 'ending', name: '结束', description: '面试结束，生成报告', questionCount: 0 }
+const PHASE_META: Record<string, { key: string; description: string; questionCount: number }> = {
+  SELF_INTRO: { key: 'intro', description: '热身放松，了解基本信息', questionCount: 1 },
+  PROFESSIONAL: { key: 'professional', description: '深度提问，考察专业技能', questionCount: 8 },
+  RESUME_DISCUSSION: { key: 'resume', description: '项目追问，深入了解项目经历', questionCount: 3 },
+  BEHAVIORAL: { key: 'behavior', description: 'STAR问题，考察软技能', questionCount: 4 },
+  ENDING: { key: 'ending', description: '面试结束，生成报告', questionCount: 0 }
 }
 
 function mapStatus(status: string): InterviewSession['status'] {
@@ -30,12 +29,16 @@ function mapStatus(status: string): InterviewSession['status'] {
   }
 }
 
-function buildPhases(selectedPhases: string[], currentPhase: string): InterviewPhase[] {
+function buildPhases(
+  selectedPhases: string[],
+  currentPhase: string,
+  phaseLabels: Record<string, string> = {}
+): InterviewPhase[] {
   return selectedPhases.map((phaseName) => {
-    const meta = PHASE_META[phaseName] || { key: phaseName.toLowerCase(), name: phaseName, description: '', questionCount: 0 }
+    const meta = PHASE_META[phaseName] || { key: phaseName.toLowerCase(), description: '', questionCount: 0 }
     return {
       key: meta.key,
-      name: meta.name,
+      name: phaseLabels[phaseName] || '未知环节',
       description: meta.description,
       questionCount: meta.questionCount,
       completed: false,
@@ -59,17 +62,22 @@ function markCompleted(phases: InterviewPhase[], currentPhaseKey: string): Inter
 
 function mapDetailToSession(detail: InterviewDetail): InterviewSession {
   const currentPhaseKey = normalizePhaseKey(detail.currentPhase)
-  const phases = markCompleted(buildPhases(detail.selectedPhases, detail.currentPhase), currentPhaseKey)
+  const phases = markCompleted(
+    buildPhases(detail.selectedPhases, detail.currentPhase, detail.phaseLabels),
+    currentPhaseKey
+  )
   return {
     id: detail.interviewId,
     positionTitle: detail.positionTitle,
     company: detail.companyName || '',
     status: mapStatus(detail.status),
+    statusLabel: detail.statusLabel,
     score: detail.overallScore,
     level: detail.grade,
     startTime: detail.startedAt ? new Date(detail.startedAt).toLocaleString('zh-CN') : '',
     phases,
-    currentPhase: detail.currentPhase
+    currentPhase: detail.currentPhase,
+    currentPhaseLabel: detail.currentPhaseLabel
   }
 }
 
@@ -84,57 +92,55 @@ function normalizePhaseKey(phase: string): string {
   }
 }
 
-const mockPhases = [
-  { key: 'intro', name: '自我介绍', description: '热身放松，了解基本信息', questionCount: 2, completed: true, current: false },
-  { key: 'professional', name: '专业面试', description: '深度提问，考察专业技能', questionCount: 8, completed: false, current: true },
-  { key: 'resume', name: '简历探讨', description: '项目追问，深入了解项目经历', questionCount: 3, completed: false, current: false },
-  { key: 'behavior', name: '行为面试', description: 'STAR问题，考察软技能', questionCount: 4, completed: false, current: false },
-  { key: 'ending', name: '结束', description: '面试结束，生成报告', questionCount: 0, completed: false, current: false }
-]
-
-const mockSession: InterviewSession = {
-  id: 1001,
+const mockDetail: InterviewDetail = {
+  interviewId: 1001,
+  resumeId: 1,
+  positionId: 1,
+  status: 'IN_PROGRESS',
+  statusLabel: '进行中',
+  currentPhase: 'PROFESSIONAL',
+  currentPhaseLabel: '专业面试',
+  selectedPhases: ['SELF_INTRO', 'PROFESSIONAL', 'RESUME_DISCUSSION', 'BEHAVIORAL', 'ENDING'],
+  phaseLabels: {
+    SELF_INTRO: '自我介绍',
+    PROFESSIONAL: '专业面试',
+    RESUME_DISCUSSION: '简历探讨',
+    BEHAVIORAL: '行为面试',
+    ENDING: '结束'
+  },
   positionTitle: 'Java开发',
-  company: '字节跳动',
-  status: 'ongoing',
-  startTime: '2024-01-20 10:00:00',
-  phases: mockPhases
+  companyName: '字节跳动',
+  startedAt: '2024-01-20T10:00:00'
 }
 
-const mockQuestion: InterviewQuestion = {
-  id: 'q-3',
-  content: '你能详细说说 synchronized 的底层实现原理吗？',
-  phase: 'professional',
-  topic: 'Java并发',
-  depth: 3
-}
-
-const mockReport: InterviewReport = {
-  id: 1001,
-  positionTitle: 'Java开发',
-  totalScore: 78,
-  level: '良好',
-  scores: [
-    { name: '技术深度', score: 80 },
-    { name: '技术广度', score: 75 },
-    { name: '实践经验', score: 82 },
-    { name: '表达能力', score: 75 }
-  ],
-  phaseSummary: [
-    '自我介绍 (1题) · 表达清晰',
-    '专业面试 (8题) · Java并发 达到L4 · MySQL 达到L3',
-    '简历探讨 (3题) · 项目经验描述清晰',
-    '行为面试 (4题) · 团队协作能力良好'
-  ],
-  weakPoints: [
+const mockReport: InterviewReportDto = {
+  interviewId: 1001,
+  overallScore: 78,
+  grade: '良好',
+  phases: {
+    SELF_INTRO: { phaseLabel: '自我介绍', completed: true, questionCount: 1 },
+    PROFESSIONAL: { phaseLabel: '专业面试', completed: true, questionCount: 8 },
+    RESUME_DISCUSSION: { phaseLabel: '简历探讨', completed: true, questionCount: 3 },
+    BEHAVIORAL: { phaseLabel: '行为面试', completed: true, questionCount: 4 },
+    ENDING: { phaseLabel: '结束', completed: true, questionCount: 0 }
+  },
+  dimensions: {
+    technicalDepth: 80,
+    technicalBreadth: 75,
+    practicalExperience: 82,
+    expression: 75,
+    learningAbility: 74
+  },
+  weaknesses: [
     'Redis 缓存一致性问题 - 不够深入',
     'Docker 容器网络配置 - 实践经验较少',
     '分布式事务解决方案 - 了解不全面'
   ],
-  strongPoints: [
+  strengths: [
     'Java 并发编程 - 原理理解深入，有源码阅读经验',
     'MySQL 索引原理 - 分析到位，能讲清楚底层结构'
   ],
+  conclusion: '本次面试已完成，候选人整体表现良好。',
   mdContent: '# 面试评估报告\n\n## 一、综合评分\n\n- 综合评分：78\n- 等级：良好\n\n## 二、维度得分\n\n| 维度 | 得分 |\n|---|---|\n| 技术深度 | 80 |\n| 技术广度 | 75 |\n| 实践经验 | 82 |\n| 表达能力 | 75 |\n| 学习能力 | 74 |\n\n## 三、环节完成情况\n\n| 环节 | 题目数 | 状态 |\n|---|---|---|\n| 自我介绍 | 2 | 已完成 |\n| 专业面试 | 8 | 已完成 |\n| 简历探讨 | 3 | 已完成 |\n| 行为面试 | 4 | 已完成 |\n| 结束 | 0 | 已完成 |\n\n## 四、优势知识点\n\n- Java 并发编程 - 原理理解深入，有源码阅读经验\n- MySQL 索引原理 - 分析到位，能讲清楚底层结构\n\n## 五、薄弱知识点\n\n- Redis 缓存一致性问题 - 不够深入\n- Docker 容器网络配置 - 实践经验较少\n- 分布式事务解决方案 - 了解不全面\n\n## 六、综合评价\n\n本次面试已完成，候选人整体表现良好。建议继续加强 Redis、Docker 和分布式事务相关知识的实践。'
 }
 
@@ -176,10 +182,19 @@ export async function startInterview(config: {
     () => ({
       interviewId: Date.now(),
       status: 'IN_PROGRESS',
+      statusLabel: '进行中',
       currentPhase: 'SELF_INTRO',
+      currentPhaseLabel: '自我介绍',
       selectedPhases: ['SELF_INTRO', 'PROFESSIONAL', 'RESUME_DISCUSSION', 'BEHAVIORAL', 'ENDING'],
       firstQuestion: '请先做一个简单的自我介绍。',
-      phaseOrder: ['SELF_INTRO', 'PROFESSIONAL', 'RESUME_DISCUSSION', 'BEHAVIORAL', 'ENDING']
+      phaseOrder: ['SELF_INTRO', 'PROFESSIONAL', 'RESUME_DISCUSSION', 'BEHAVIORAL', 'ENDING'],
+      phaseLabels: {
+        SELF_INTRO: '自我介绍',
+        PROFESSIONAL: '专业面试',
+        RESUME_DISCUSSION: '简历探讨',
+        BEHAVIORAL: '行为面试',
+        ENDING: '结束'
+      }
     })
   )
   const data = res.data
@@ -188,16 +203,18 @@ export async function startInterview(config: {
     positionTitle: '',
     company: '',
     status: mapStatus(data.status),
+    statusLabel: data.statusLabel,
     startTime: '',
-    phases: buildPhases(data.phaseOrder, data.currentPhase),
-    currentPhase: data.currentPhase
+    phases: buildPhases(data.phaseOrder, data.currentPhase, data.phaseLabels),
+    currentPhase: data.currentPhase,
+    currentPhaseLabel: data.currentPhaseLabel
   }
 }
 
 export async function getInterview(id: number): Promise<InterviewSession | null> {
   const res = await apiCall(
     () => request.get(`/interviews/${id}`) as Promise<ApiResponse<InterviewDetail>>,
-    () => mockSession,
+    () => mockDetail,
     null
   )
   return res.data ? mapDetailToSession(res.data) : null
@@ -216,11 +233,14 @@ export interface AnswerEvent {
   type: 'thinking' | 'phaseChange' | 'question' | 'interviewEnd' | 'done' | 'error'
   content?: string
   phase?: string
+  phaseLabel?: string
   depth?: number
   topicId?: string
   topicName?: string
   previousPhase?: string
+  previousPhaseLabel?: string
   currentPhase?: string
+  currentPhaseLabel?: string
   code?: string
   message?: string
   fallback?: boolean
@@ -306,9 +326,8 @@ export async function getInterviewReport(id: number): Promise<InterviewReport | 
       { name: '表达能力', score: dto.dimensions.expression },
       { name: '学习能力', score: dto.dimensions.learningAbility }
     ],
-    phaseSummary: Object.entries(dto.phases).map(([phase, summary]) => {
-      const meta = PHASE_META[phase]
-      return `${meta ? meta.name : phase} (${summary.questionCount}题) ${summary.completed ? '· 已完成' : ''}`
+    phaseSummary: Object.entries(dto.phases).map(([, summary]) => {
+      return `${summary.phaseLabel || '未知环节'} (${summary.questionCount}题) ${summary.completed ? '· 已完成' : ''}`
     }),
     weakPoints: dto.weaknesses.length ? dto.weaknesses : ['部分问题可进一步深入'],
     strongPoints: dto.strengths.length ? dto.strengths : ['回答态度积极'],
@@ -329,9 +348,9 @@ export async function getInterviewHistory(): Promise<InterviewSession[]> {
   const res = await apiCall(
     () => request.get('/interviews') as Promise<ApiResponse<InterviewDetail[]>>,
     () => [
-      { ...mockSession, status: 'completed', score: 78, level: '良好' },
-      { ...mockSession, id: 1002, positionTitle: '前端开发', company: '腾讯', status: 'completed', score: 85, level: '优秀' },
-      { ...mockSession, id: 1003, positionTitle: '产品经理', company: '阿里巴巴', status: 'interrupted' }
+      { ...mockDetail, status: 'ENDED', statusLabel: '已结束', overallScore: 78, grade: '良好' },
+      { ...mockDetail, interviewId: 1002, positionTitle: '前端开发', companyName: '腾讯', status: 'ENDED', statusLabel: '已结束', overallScore: 85, grade: '优秀' },
+      { ...mockDetail, interviewId: 1003, positionTitle: '产品经理', companyName: '阿里巴巴', status: 'INTERRUPTED', statusLabel: '已中断' }
     ],
     []
   )

@@ -7,25 +7,34 @@ const mockPositions: Position[] = [
     positionId: 1,
     positionName: 'Java开发',
     companyName: '字节跳动',
-    jobCategory: '技术族',
+    jobCategory: 'TECH',
+    jobCategoryLabel: '技术类',
     parseStatus: 'CONFIRMED',
-    auditStatus: 'APPROVED'
+    parseStatusLabel: '已确认',
+    auditStatus: 'APPROVED',
+    auditStatusLabel: '已通过'
   },
   {
     positionId: 2,
     positionName: '前端开发',
     companyName: '腾讯',
-    jobCategory: '技术族',
+    jobCategory: 'TECH',
+    jobCategoryLabel: '技术类',
     parseStatus: 'CONFIRMED',
-    auditStatus: 'APPROVED'
+    parseStatusLabel: '已确认',
+    auditStatus: 'APPROVED',
+    auditStatusLabel: '已通过'
   },
   {
     positionId: 3,
     positionName: '产品经理',
     companyName: '阿里巴巴',
-    jobCategory: '产品族',
+    jobCategory: 'PRODUCT',
+    jobCategoryLabel: '产品类',
     parseStatus: 'CONFIRMED',
-    auditStatus: 'APPROVED'
+    parseStatusLabel: '已确认',
+    auditStatus: 'APPROVED',
+    auditStatusLabel: '已通过'
   }
 ]
 
@@ -79,7 +88,14 @@ export async function createPosition(data: Partial<Position>): Promise<Position>
   }
   const res = await apiCall(
     () => request.post('/positions', payload) as Promise<ApiResponse<Position>>,
-    () => ({ ...data, positionId: Date.now(), parseStatus: 'PENDING', auditStatus: 'PENDING' } as Position)
+    () => ({
+      ...data,
+      positionId: Date.now(),
+      parseStatus: 'PENDING',
+      parseStatusLabel: '待解析',
+      auditStatus: 'PENDING',
+      auditStatusLabel: '待审核'
+    } as Position)
   )
   return res.data
 }
@@ -101,7 +117,9 @@ export async function uploadPosition(
       positionId: Date.now(),
       positionName,
       parseStatus: 'PENDING',
-      auditStatus: 'PENDING'
+      parseStatusLabel: '待解析',
+      auditStatus: 'PENDING',
+      auditStatusLabel: '待审核'
     } as Position)
   )
   return res.data
@@ -113,15 +131,28 @@ export async function getPositionDetail(positionId: number): Promise<Position> {
     () => null,
     null
   )
-  return res.data || { positionId, positionName: '', jobCategory: '', parseStatus: 'PENDING', auditStatus: 'PENDING' }
+  return res.data || {
+    positionId,
+    positionName: '',
+    jobCategory: '',
+    parseStatus: 'PENDING',
+    parseStatusLabel: '待解析',
+    auditStatus: 'PENDING',
+    auditStatusLabel: '待审核'
+  }
 }
 
 export async function getPositionProfile(positionId: number): Promise<{
   profile?: PositionProfileData
   parseStatus?: string
+  parseStatusLabel?: string
 }> {
   const res = await apiCall(
-    () => request.get(`/positions/${positionId}/profile`) as Promise<ApiResponse<{ profile?: PositionProfileData; parseStatus?: string }>>,
+    () => request.get(`/positions/${positionId}/profile`) as Promise<ApiResponse<{
+      profile?: PositionProfileData
+      parseStatus?: string
+      parseStatusLabel?: string
+    }>>,
     () => null,
     null
   )
@@ -141,7 +172,15 @@ export async function reparsePosition(positionId: number): Promise<Position> {
     () => null,
     null
   )
-  return res.data || { positionId, positionName: '', jobCategory: '', parseStatus: 'PENDING', auditStatus: 'PENDING' }
+  return res.data || {
+    positionId,
+    positionName: '',
+    jobCategory: '',
+    parseStatus: 'PENDING',
+    parseStatusLabel: '待解析',
+    auditStatus: 'PENDING',
+    auditStatusLabel: '待审核'
+  }
 }
 
 export async function deletePosition(positionId: number): Promise<void> {

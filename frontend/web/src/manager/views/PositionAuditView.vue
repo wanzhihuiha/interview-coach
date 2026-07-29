@@ -16,11 +16,11 @@
       <el-table :data="positions" v-loading="loading" stripe>
         <el-table-column prop="positionId" label="ID" width="80" />
         <el-table-column prop="positionName" label="岗位名称" />
-        <el-table-column prop="jobCategory" label="岗位类别" width="120" />
+        <el-table-column prop="jobCategoryLabel" label="岗位类别" width="120" />
         <el-table-column prop="companyName" label="公司" />
         <el-table-column prop="auditStatus" label="审核状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.auditStatus)">{{ statusText(row.auditStatus) }}</el-tag>
+            <el-tag :type="statusType(row.auditStatus)">{{ row.auditStatusLabel || '状态未知' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="isPublic" label="是否公共" width="100">
@@ -79,15 +79,6 @@ function statusType(status: string) {
     REJECTED: 'danger'
   }
   return map[status] || 'info'
-}
-
-function statusText(status: string) {
-  const map: Record<string, string> = {
-    PENDING: '待审核',
-    APPROVED: '已通过',
-    REJECTED: '已拒绝'
-  }
-  return map[status] || status
 }
 
 async function loadPositions() {

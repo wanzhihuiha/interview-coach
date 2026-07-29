@@ -78,12 +78,16 @@ export interface Position {
   positionName: string
   companyName?: string
   jobCategory: string
+  jobCategoryLabel?: string
   level?: string
+  levelLabel?: string
   location?: string
   salaryRange?: string
   jdContent?: string
   parseStatus: string
+  parseStatusLabel?: string
   auditStatus: string
+  auditStatusLabel?: string
   createdAt?: string
   updatedAt?: string
   profile?: PositionProfileData
@@ -126,9 +130,11 @@ export interface InterviewSession {
   status: 'ongoing' | 'completed' | 'interrupted'
   score?: number
   level?: string
+  statusLabel?: string
   startTime: string
   phases: InterviewPhase[]
   currentPhase?: string
+  currentPhaseLabel?: string
 }
 
 export interface InterviewPhase {
@@ -152,10 +158,13 @@ export interface InterviewQuestion {
 export interface CreateInterviewResponse {
   interviewId: number
   status: string
+  statusLabel?: string
   currentPhase: string
+  currentPhaseLabel?: string
   selectedPhases: string[]
   firstQuestion: string
   phaseOrder: string[]
+  phaseLabels?: Record<string, string>
 }
 
 /** 后端原始面试详情 */
@@ -164,24 +173,28 @@ export interface InterviewDetail {
   resumeId: number
   positionId: number
   status: string
+  statusLabel?: string
   currentPhase: string
+  currentPhaseLabel?: string
   currentTopic?: string
   currentDepth?: number
   totalQuestionCount?: number
   selectedPhases: string[]
-    pendingQuestion?: string
-    positionTitle: string
-    companyName: string
-    overallScore?: number
-    grade?: string
-    startedAt?: string
-    endedAt?: string
+  phaseLabels?: Record<string, string>
+  pendingQuestion?: string
+  positionTitle: string
+  companyName: string
+  overallScore?: number
+  grade?: string
+  startedAt?: string
+  endedAt?: string
 }
 
 /** 后端消息记录 */
 export interface InterviewMessage {
   messageId: number
   phase: string
+  phaseLabel?: string
   role: 'interviewer' | 'candidate'
   content: string
   topic?: string
@@ -195,7 +208,7 @@ export interface InterviewReportDto {
   interviewId: number
   overallScore: number
   grade: string
-  phases: Record<string, { completed: boolean; questionCount: number }>
+  phases: Record<string, { phaseLabel?: string; completed: boolean; questionCount: number }>
   dimensions: {
     technicalDepth: number
     technicalBreadth: number

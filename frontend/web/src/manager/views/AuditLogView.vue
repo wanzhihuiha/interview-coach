@@ -6,18 +6,18 @@
           <span>审计日志</span>
           <div class="audit-filters">
             <el-select v-model="filterCaller" placeholder="Agent" clearable size="small" style="width: 140px">
-              <el-option label="INTERVIEWER" value="INTERVIEWER" />
-              <el-option label="EVALUATOR" value="EVALUATOR" />
-              <el-option label="REPORT" value="REPORT" />
-              <el-option label="COACH" value="COACH" />
-              <el-option label="COORDINATOR" value="COORDINATOR" />
-              <el-option label="RESUME_ANALYSIS" value="RESUME_ANALYSIS" />
-              <el-option label="JD_ANALYSIS" value="JD_ANALYSIS" />
+              <el-option label="面试官" value="INTERVIEWER" />
+              <el-option label="回答评估" value="EVALUATOR" />
+              <el-option label="报告生成" value="REPORT" />
+              <el-option label="成长教练" value="COACH" />
+              <el-option label="流程协调" value="COORDINATOR" />
+              <el-option label="简历分析" value="RESUME_ANALYSIS" />
+              <el-option label="岗位分析" value="JD_ANALYSIS" />
             </el-select>
             <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 120px">
-              <el-option label="ALLOWED" value="ALLOWED" />
-              <el-option label="DENIED" value="DENIED" />
-              <el-option label="FAILED" value="FAILED" />
+              <el-option label="允许" value="ALLOWED" />
+              <el-option label="拒绝" value="DENIED" />
+              <el-option label="失败" value="FAILED" />
             </el-select>
             <el-button type="primary" size="small" @click="loadLogs">查询</el-button>
           </div>
@@ -26,12 +26,12 @@
 
       <el-table :data="logs" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="caller" label="调用者" width="120" />
+        <el-table-column prop="callerLabel" label="调用者" width="120" />
         <el-table-column prop="operation" label="操作" width="160" />
         <el-table-column prop="methodKey" label="方法" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+            <el-tag :type="statusType(row.status)">{{ row.statusLabel || '状态未知' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="durationMs" label="耗时(ms)" width="100" />

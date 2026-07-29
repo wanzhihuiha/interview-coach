@@ -25,8 +25,8 @@
 
       <el-table :data="questions" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="jobCategory" label="岗位类别" width="120" />
-        <el-table-column prop="phase" label="面试环节" width="120" />
+        <el-table-column prop="jobCategoryLabel" label="岗位类别" width="120" />
+        <el-table-column prop="phaseLabel" label="面试环节" width="120" />
         <el-table-column prop="topicName" label="主题" width="160" />
         <el-table-column prop="difficultyLevel" label="难度等级" width="120">
           <template #default="{ row }">

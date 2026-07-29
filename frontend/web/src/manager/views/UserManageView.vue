@@ -12,15 +12,15 @@
         <el-table-column prop="email" label="邮箱" />
         <el-table-column prop="roles" label="角色">
           <template #default="{ row }">
-            <el-tag v-for="role in row.roles" :key="role" size="small" style="margin-right: 4px">
-              {{ role }}
+            <el-tag v-for="(roleLabel, index) in (row.roleLabels || [])" :key="row.roles[index] || roleLabel" size="small" style="margin-right: 4px">
+              {{ roleLabel }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'">
-              {{ row.status === 'ACTIVE' ? '正常' : '禁用' }}
+              {{ row.statusLabel || '状态未知' }}
             </el-tag>
           </template>
         </el-table-column>

@@ -15,10 +15,10 @@
         @row-click="(row: Position) => selectedId = row.positionId">
         <el-table-column prop="positionName" label="岗位名称" min-width="160" />
         <el-table-column prop="companyName" label="公司" min-width="140" />
-        <el-table-column prop="jobCategory" label="岗位大类" min-width="100" />
+        <el-table-column prop="jobCategoryLabel" label="岗位大类" min-width="100" />
         <el-table-column prop="parseStatus" label="解析状态" min-width="120">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.parseStatus)">{{ statusText(row.parseStatus) }}</el-tag>
+            <el-tag :type="statusTagType(row.parseStatus)">{{ row.parseStatusLabel || '未知状态' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="280">
@@ -45,8 +45,8 @@
           </div>
         </template>
         <p><strong>公司：</strong>{{ selectedPosition.companyName || '-' }}</p>
-        <p><strong>岗位大类：</strong>{{ selectedPosition.jobCategory }}</p>
-        <p><strong>等级：</strong>{{ selectedPosition.level || '-' }}</p>
+        <p><strong>岗位大类：</strong>{{ selectedPosition.jobCategoryLabel || '-' }}</p>
+        <p><strong>等级：</strong>{{ selectedPosition.levelLabel || '-' }}</p>
         <p><strong>JD 描述：</strong></p>
         <p class="jd-desc">{{ selectedPosition.jdContent || '暂无岗位描述。' }}</p>
       </el-card>
@@ -96,7 +96,7 @@
           <p>岗位：{{ currentProfile.basicInfo?.title || '-' }}</p>
           <p>公司：{{ currentProfile.basicInfo?.company || '-' }}</p>
           <p>地点：{{ currentProfile.basicInfo?.location || '-' }}</p>
-          <p>等级：{{ currentProfile.basicInfo?.level || '-' }}</p>
+          <p>等级：{{ currentPosition?.levelLabel || '-' }}</p>
           <p>薪资：{{ currentProfile.basicInfo?.salaryRange || '-' }}</p>
 
           <h4>必备技能</h4>
@@ -369,16 +369,6 @@ function statusTagType(status: string) {
   }
 }
 
-function statusText(status: string) {
-  switch (status) {
-    case 'PENDING': return '待解析'
-    case 'PARSING': return '解析中'
-    case 'PENDING_CONFIRM': return '待确认'
-    case 'CONFIRMED': return '已确认'
-    case 'PARSE_FAILED': return '解析失败'
-    default: return status
-  }
-}
 </script>
 
 <style scoped>

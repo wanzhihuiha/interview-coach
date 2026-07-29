@@ -39,9 +39,7 @@
           </el-table-column>
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
-              <el-tag v-if="row.status === 'completed'" type="success">已完成</el-tag>
-              <el-tag v-else-if="row.status === 'ongoing'" type="primary">进行中</el-tag>
-              <el-tag v-else type="info">已中断</el-tag>
+              <el-tag :type="statusTagType(row.status)">{{ row.statusLabel || '状态未知' }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="180">
@@ -62,12 +60,10 @@
           </span>
         </template>
         <p><strong>当前状态：</strong>
-          <el-tag v-if="selectedSession.status === 'completed'" type="success">已完成</el-tag>
-          <el-tag v-else-if="selectedSession.status === 'ongoing'" type="primary">进行中</el-tag>
-          <el-tag v-else type="info">已中断</el-tag>
+          <el-tag :type="statusTagType(selectedSession.status)">{{ selectedSession.statusLabel || '状态未知' }}</el-tag>
         </p>
         <p v-if="selectedSession.startTime"><strong>面试时间：</strong>{{ selectedSession.startTime }}</p>
-        <p v-if="selectedSession.currentPhase"><strong>当前/最后环节：</strong>{{ phaseName(selectedSession.currentPhase) }}</p>
+        <p v-if="selectedSession.currentPhase"><strong>当前/最后环节：</strong>{{ selectedSession.currentPhaseLabel || '未知环节' }}</p>
         <div class="detail-actions">
           <el-button v-if="selectedSession.status === 'completed' || selectedSession.status === 'interrupted'" type="primary" @click="viewReport(selectedSession.id)">查看报告</el-button>
           <el-button v-else type="primary" @click="continueInterview(selectedSession.id)">继续面试</el-button>
@@ -139,16 +135,10 @@ function selectSession(row: InterviewSession) {
   selectedSession.value = row
 }
 
-const PHASE_NAMES: Record<string, string> = {
-  SELF_INTRO: '自我介绍',
-  PROFESSIONAL: '专业面试',
-  RESUME_DISCUSSION: '简历探讨',
-  BEHAVIORAL: '行为面试',
-  ENDING: '结束'
-}
-
-function phaseName(phase?: string): string {
-  return phase ? PHASE_NAMES[phase] || phase : '-'
+function statusTagType(status: InterviewSession['status']) {
+  if (status === 'completed') return 'success'
+  if (status === 'ongoing') return 'primary'
+  return 'info'
 }
 </script>
 
