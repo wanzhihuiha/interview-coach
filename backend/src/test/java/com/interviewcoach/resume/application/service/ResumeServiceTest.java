@@ -10,6 +10,7 @@ import com.interviewcoach.common.exception.BusinessException;
 import com.interviewcoach.resume.application.dto.ConfirmResumeRequest;
 import com.interviewcoach.resume.application.dto.ResumeDetailResponse;
 import com.interviewcoach.resume.application.dto.ResumeListResponse;
+import com.interviewcoach.resume.application.dto.ResumeParseStatusResponse;
 import com.interviewcoach.resume.application.dto.ResumeProfileResponse;
 import com.interviewcoach.resume.domain.entity.Resume;
 import com.interviewcoach.resume.domain.entity.ResumeParseStatus;
@@ -137,6 +138,19 @@ class ResumeServiceTest {
         assertThat(response.getExperienceLevel()).isEqualTo("JUNIOR");
         assertThat(response.getExperienceLevelLabel()).isEqualTo("初级");
         assertThat(response.getStatusLabel()).isEqualTo("已确认");
+    }
+
+    @Test
+    void shouldQueueReparseAndExposePendingStatus() {
+        Long userId = 1L;
+        Resume resume = createResume(userId, "简历1.pdf", ResumeParseStatus.PENDING_CONFIRM);
+
+        resumeService.reparseResume(userId, resume.getId());
+
+        ResumeParseStatusResponse status = resumeService.getParseStatus(userId, resume.getId());
+        assertThat(status.getStatus()).isEqualTo("PENDING");
+        assertThat(status.getStatusLabel()).isEqualTo("待解析");
+        assertThat(status.getParseProgress()).isEqualTo(10);
     }
 
     @Test

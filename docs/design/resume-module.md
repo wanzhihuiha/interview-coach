@@ -242,6 +242,7 @@ public enum ResumeParseStatus {
 | GET | /api/v1/resumes | 获取简历列表 | 是 |
 | GET | /api/v1/resumes/{id} | 获取简历详情 | 是 |
 | GET | /api/v1/resumes/{id}/profile | 获取用户画像 | 是 |
+| GET | /api/v1/resumes/{id}/parse-status | 查询异步解析状态，前端每 5 秒轮询 | 是 |
 | PUT | /api/v1/resumes/{id}/confirm | 确认简历解析结果 | 是 |
 | PUT | /api/v1/resumes/{id}/reparse | 重新解析简历 | 是 |
 | DELETE | /api/v1/resumes/{id} | 删除简历 | 是 |
