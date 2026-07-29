@@ -26,5 +26,8 @@ Thumbs.db
 !.env.example
 backend/src/main/resources/application-local.yml
 
+# Local agent instructions
+/AGENTS.md
+
 # The actual frontend package lives in frontend/web/.
 /frontend/package-lock.json
