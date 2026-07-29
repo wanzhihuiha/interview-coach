@@ -72,6 +72,7 @@ The backend reads the following environment variables. Set them for your local e
 | `REDIS_HOST` | No | Redis host; defaults to `localhost` |
 | `REDIS_PORT` | No | Redis port; defaults to `6379` |
 | `REDIS_PASSWORD` | No | Redis password; leave empty when authentication is disabled |
+| `REDIS_DB` | No | Redis logical database number; defaults to `0` |
 | `JWT_SECRET` | Recommended | JWT signing key; use a sufficiently long random value |
 
 PowerShell example:

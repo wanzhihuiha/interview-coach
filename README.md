@@ -72,6 +72,7 @@ CREATE DATABASE interview_coach
 | `REDIS_HOST` | 否 | Redis 地址，默认 `localhost` |
 | `REDIS_PORT` | 否 | Redis 端口，默认 `6379` |
 | `REDIS_PASSWORD` | 否 | Redis 密码，无密码时留空 |
+| `REDIS_DB` | 否 | Redis 逻辑库编号，默认 `0` |
 | `JWT_SECRET` | 建议设置 | JWT 签名密钥，应使用足够长的随机字符串 |
 
 PowerShell 示例：
