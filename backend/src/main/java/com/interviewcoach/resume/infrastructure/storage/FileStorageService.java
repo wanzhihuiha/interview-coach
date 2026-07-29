@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 简历文件存储服务。
+ * 本地文件系统简历存储服务，按用户 ID 隔离目录并返回绝对路径。
  */
 @Slf4j
 @Service
@@ -21,6 +21,9 @@ public class FileStorageService {
 
     private final Path storagePath;
 
+    /**
+     * 在 Bean 初始化时规范化并创建存储根目录；目录不可创建时阻止应用继续启动。
+     */
     public FileStorageService(@Value("${resume.upload.storage-path:./uploads/resumes}") String storagePath) {
         this.storagePath = Paths.get(storagePath).toAbsolutePath().normalize();
         try {
@@ -32,10 +35,11 @@ public class FileStorageService {
 
     /**
      * 保存用户上传的简历文件。
+     * 文件系统写入不参与调用方数据库事务；后续数据库写入失败时，已写文件不会自动回滚。
      *
-     * @param userId 用户ID
+     * @param userId 用户 ID
      * @param file   上传文件
-     * @return 相对存储路径
+     * @return 已保存文件的绝对路径
      */
     public String store(Long userId, MultipartFile file) {
         String originalName = file.getOriginalFilename();
@@ -50,13 +54,14 @@ public class FileStorageService {
             }
             return target.toString();
         } catch (IOException e) {
-            log.error("保存简历文件失败: userId={}, fileName={}", userId, originalName, e);
-            throw new RuntimeException("保存简历文件失败", e);
+            log.warn("[ResumeStorage] 保存简历文件失败: userId={}, fileSize={}, errorType={}",
+                    userId, file.getSize(), e.getClass().getSimpleName());
+            throw new RuntimeException("保存简历文件失败: " + e.getClass().getSimpleName());
         }
     }
 
     /**
-     * 删除简历文件。
+     * 尽力删除简历文件；路径为空时直接跳过，I/O 删除失败只记录安全摘要且不阻断数据库删除。
      */
     public void delete(String filePath) {
         if (filePath == null || filePath.isBlank()) {
@@ -65,7 +70,8 @@ public class FileStorageService {
         try {
             Files.deleteIfExists(Path.of(filePath));
         } catch (IOException e) {
-            log.warn("删除简历文件失败: {}", filePath, e);
+            log.warn("[ResumeStorage] 删除简历文件失败: errorType={}",
+                    e.getClass().getSimpleName());
         }
     }
 

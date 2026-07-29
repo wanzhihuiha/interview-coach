@@ -11,8 +11,8 @@ import org.springframework.stereotype.Component;
 public class ResumeDesensitizer {
 
     /**
-     * 对简历文本进行脱敏。
-     * MVP 阶段采用规则替换：姓名/公司名/项目名替换为通用标签。
+     * 对简历文本进行基础规则脱敏。
+     * 当前仅替换手机号、邮箱和 18 位身份证号；不会自动识别姓名、公司名或项目名。
      */
     @AgentPermission(AgentType.RESUME_ANALYSIS)
     public String desensitize(String text) {

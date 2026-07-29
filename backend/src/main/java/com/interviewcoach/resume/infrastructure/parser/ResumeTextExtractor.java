@@ -25,6 +25,7 @@ public class ResumeTextExtractor {
      * @param file     上传文件
      * @param fileType 文件类型：PDF / TXT
      * @return 提取的纯文本
+     * @throws IllegalArgumentException 文件类型不受支持或文件无法读取
      */
     public String extract(MultipartFile file, String fileType) {
         try {
@@ -34,22 +35,29 @@ public class ResumeTextExtractor {
                 default -> throw new IllegalArgumentException("不支持的文件类型: " + fileType);
             };
         } catch (IOException e) {
-            log.error("简历文本提取失败: fileType={}", fileType, e);
-            throw new IllegalArgumentException("文件读取失败", e);
+            log.warn("[ResumeText] 上传文件文本提取失败: fileType={}, errorType={}",
+                    fileType, e.getClass().getSimpleName());
+            throw new IllegalArgumentException("文件读取失败: " + e.getClass().getSimpleName());
         }
     }
 
     /**
-     * 从已存储的文件路径中提取纯文本内容。
+     * 从已持久化的文件路径中提取纯文本，供后台简历解析任务使用。
      *
      * @param filePath 文件绝对路径
      * @param fileType 文件类型：PDF / TXT
      * @return 提取的纯文本
+     * @throws IllegalArgumentException 文件不存在、类型不受支持或文件无法读取
      */
     public String extractFromFile(String filePath, String fileType) {
-        Path path = Path.of(filePath);
+        Path path;
+        try {
+            path = Path.of(filePath);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("简历文件路径无效: " + e.getClass().getSimpleName());
+        }
         if (!Files.exists(path)) {
-            throw new IllegalArgumentException("简历文件不存在: " + filePath);
+            throw new IllegalArgumentException("简历文件不存在");
         }
         try {
             return switch (fileType.toUpperCase()) {
@@ -58,8 +66,8 @@ public class ResumeTextExtractor {
                 default -> throw new IllegalArgumentException("不支持的文件类型: " + fileType);
             };
         } catch (IOException e) {
-            log.error("简历文本提取失败: filePath={}, fileType={}", filePath, fileType, e);
-            throw new IllegalArgumentException("文件读取失败", e);
+            // 后台工作器会用 resumeId 和处理阶段统一记录终态错误，这里不重复输出文件路径。
+            throw new IllegalArgumentException("文件读取失败: " + e.getClass().getSimpleName());
         }
     }
 

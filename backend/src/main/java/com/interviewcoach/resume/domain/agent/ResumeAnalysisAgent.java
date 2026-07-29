@@ -13,7 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 简历分析智能体，负责调用 LLM 解析简历文本并生成用户画像。
+ * 简历分析智能体，负责在 Agent 权限上下文中脱敏简历文本、调用 LLM 并生成结构化画像。
+ * 后台解析工作器会缓存并保存返回结果；模型调用或响应解析失败时按设计降级为空画像，
+ * 再由用户在待确认阶段补充。
  */
 @Slf4j
 @Component
@@ -82,9 +84,10 @@ public class ResumeAnalysisAgent {
 
     /**
      * 分析简历文本并生成用户画像。
+     * 原始文本先经过脱敏器再进入提示词；空文本、模型异常或无效响应均返回空画像而不向上抛出。
      *
      * @param resumeText 原始简历文本
-     * @return 用户画像数据
+     * @return 模型画像或可供用户手动补充的空画像
      */
     public UserProfileData analyze(String resumeText) {
         return AgentContext.runAs(AgentType.RESUME_ANALYSIS, () -> {
@@ -94,26 +97,37 @@ public class ResumeAnalysisAgent {
             }
 
             String desensitizedText = desensitizer.desensitize(resumeText);
+            log.debug("[ResumeAnalysisAgent] 简历脱敏完成: inputLength={}, outputLength={}",
+                    resumeText.length(), desensitizedText.length());
             String userPrompt = String.format(USER_PROMPT_TEMPLATE, desensitizedText);
 
             try {
                 String response = llmService.chat(SYSTEM_PROMPT, userPrompt);
-                return parseProfile(response);
+                UserProfileData profileData = parseProfile(response);
+                log.debug("[ResumeAnalysisAgent] 模型响应结构化处理完成: responseLength={}",
+                        response == null ? 0 : response.length());
+                return profileData;
             } catch (Exception e) {
-                log.error("[ResumeAnalysisAgent] LLM 解析失败，返回空画像", e);
+                // LLM 方法上的审计切面已经记录异常堆栈，这里只记录业务降级结果，避免重复 error。
+                log.warn("[ResumeAnalysisAgent] LLM 调用失败，降级为空画像: errorType={}",
+                        e.getClass().getSimpleName());
                 return UserProfileData.empty();
             }
         });
     }
 
+    /**
+     * 将模型响应转换为画像，并把缺失集合归一化为空集合；无效 JSON 降级为空画像。
+     */
     private UserProfileData parseProfile(String rawResponse) {
         String json = extractJson(rawResponse);
         try {
             UserProfileData data = objectMapper.readValue(json, UserProfileData.class);
             if (data == null) {
+                log.warn("[ResumeAnalysisAgent] LLM 返回空 JSON 值，降级为空画像");
                 return UserProfileData.empty();
             }
-            // 兜底空字段
+            // 下游展示和派生逻辑按非 null 集合处理，统一在模型边界完成归一化。
             if (data.getSkillTags() == null) data.setSkillTags(List.of());
             if (data.getProjectExperience() == null) data.setProjectExperience(List.of());
             if (data.getWorkExperience() == null) data.setWorkExperience(List.of());
@@ -122,13 +136,15 @@ public class ResumeAnalysisAgent {
             if (data.getConfidenceLevel() == null) data.setConfidenceLevel(0.0);
             return data;
         } catch (JsonProcessingException e) {
-            log.error("[ResumeAnalysisAgent] LLM 返回 JSON 解析失败: {}", json, e);
+            log.warn("[ResumeAnalysisAgent] LLM 返回 JSON 解析失败，降级为空画像: responseLength={}, errorType={}",
+                    rawResponse == null ? 0 : rawResponse.length(), e.getClass().getSimpleName());
             return UserProfileData.empty();
         }
     }
 
     /**
      * 从 LLM 响应中提取 JSON 内容，支持 Markdown 代码块和普通 JSON。
+     * 无法识别包装格式时返回去除首尾空白的原文，由结构化解析统一判定是否有效。
      */
     private String extractJson(String rawResponse) {
         if (rawResponse == null || rawResponse.isBlank()) {
@@ -164,7 +180,7 @@ public class ResumeAnalysisAgent {
 
     /**
      * 根据画像数据推断经验水平。
-     * 优先使用 LLM 返回的 experienceLevel；若未返回或非法，则按工作年限兜底。
+     * 依次使用 LLM 等级、基本信息工作年限和工作经历年限汇总，均不可用时返回初级。
      */
     public String inferExperienceLevel(UserProfileData data) {
         if (data == null) {
@@ -174,7 +190,7 @@ public class ResumeAnalysisAgent {
         // 1. 优先信任 LLM 根据最新相关工作经验判定的等级
         String llmLevel = normalizeExperienceLevel(data.getExperienceLevel());
         if (llmLevel != null) {
-            log.info("[ResumeAnalysisAgent] 使用 LLM 判定的经验等级: {}", llmLevel);
+            log.debug("[ResumeAnalysisAgent] 使用 LLM 返回的有效经验等级");
             return llmLevel;
         }
 
@@ -218,6 +234,9 @@ public class ResumeAnalysisAgent {
         return null;
     }
 
+    /**
+     * 按当前业务阈值分级：0-2 年为初级，3-6 年为中级，7 年及以上为高级。
+     */
     private static String classifyExperienceLevel(int years) {
         if (years >= 7) {
             return "SENIOR";
@@ -227,6 +246,10 @@ public class ResumeAnalysisAgent {
         return "JUNIOR";
     }
 
+    /**
+     * 从单段经历中提取整数年数。
+     * 支持“X 年”、起止年份和“至今”；只有开始年份时按持续到当前年份计算，负跨度归零。
+     */
     private static int extractYears(UserProfileData.WorkExperience work) {
         String duration = work.getDuration();
         if (duration == null || duration.isBlank()) {
