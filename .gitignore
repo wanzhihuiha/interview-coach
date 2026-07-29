@@ -1,0 +1,30 @@
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Java and Maven build output
+**/target/
+*.class
+
+# Node.js and frontend build output
+**/node_modules/
+**/dist/
+**/coverage/
+*.tsbuildinfo
+
+# Runtime files
+*.log
+**/logs/
+**/uploads/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+backend/src/main/resources/application-local.yml
+
+# The actual frontend package lives in frontend/web/.
+/frontend/package-lock.json
