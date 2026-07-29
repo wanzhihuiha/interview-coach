@@ -32,11 +32,12 @@ public class ModelRouter {
     }
 
     /**
-     * 记录模型切换日志。
+     * 记录模型切换日志；只保留异常类型，避免供应商错误正文携带提示词或响应内容。
      */
     public void recordFallback(ModelTier tier, VendorModel from, VendorModel to, Throwable cause) {
-        log.warn("[ModelRouter] 模型降级: tier={}, from={}/{}, to={}/{}, reason={}",
-                tier, from.getVendorKey(), from.getModel(), to.getVendorKey(), to.getModel(), cause.getMessage());
+        log.warn("[ModelRouter] 模型降级: tier={}, from={}/{}, to={}/{}, errorType={}",
+                tier, from.getVendorKey(), from.getModel(), to.getVendorKey(), to.getModel(),
+                cause.getClass().getSimpleName());
     }
 
     private LlmProperties.VendorModelConfig getTierConfig(ModelTier tier) {
