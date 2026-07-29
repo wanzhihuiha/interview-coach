@@ -1,6 +1,6 @@
 import request from './request'
 import { apiCall } from './request'
-import type { ApiResponse, Resume, UserProfileData } from '@/types'
+import type { ApiResponse, Resume, ResumeParseStatus, UserProfileData } from '@/types'
 
 const mockResumes: Resume[] = [
   {
@@ -8,7 +8,9 @@ const mockResumes: Resume[] = [
     fileName: '张三_Java开发_简历.pdf',
     fileType: 'PDF',
     status: 'CONFIRMED',
-    jobCategory: '技术族',
+    statusLabel: '已确认',
+    jobCategory: 'TECH',
+    jobCategoryLabel: '技术类',
     createdAt: '2026-07-20T10:00:00'
   },
   {
@@ -16,7 +18,9 @@ const mockResumes: Resume[] = [
     fileName: '李四_前端开发_简历.txt',
     fileType: 'TXT',
     status: 'PENDING_CONFIRM',
-    jobCategory: '技术族',
+    statusLabel: '待确认',
+    jobCategory: 'TECH',
+    jobCategoryLabel: '技术类',
     createdAt: '2026-07-22T14:30:00'
   }
 ]
@@ -43,6 +47,7 @@ export async function uploadResume(file: File): Promise<Resume> {
       resumeId: Date.now(),
       fileName: file.name,
       status: 'PENDING',
+      statusLabel: '待解析',
       createdAt: new Date().toISOString()
     })
   )
@@ -58,13 +63,33 @@ export async function getResumeDetail(resumeId: number): Promise<Resume> {
   return res.data || { resumeId, fileName: '', status: 'PENDING' }
 }
 
-export async function getResumeProfile(resumeId: number): Promise<{ profile?: UserProfileData; experienceLevel?: string; status?: string }> {
+export async function getResumeProfile(resumeId: number): Promise<{
+  profile?: UserProfileData
+  experienceLevel?: string
+  experienceLevelLabel?: string
+  status?: string
+  statusLabel?: string
+}> {
   const res = await apiCall(
-    () => request.get(`/resumes/${resumeId}/profile`) as Promise<ApiResponse<{ profile?: UserProfileData; experienceLevel?: string; status?: string }>>,
+    () => request.get(`/resumes/${resumeId}/profile`) as Promise<ApiResponse<{
+      profile?: UserProfileData
+      experienceLevel?: string
+      experienceLevelLabel?: string
+      status?: string
+      statusLabel?: string
+    }>>,
     () => null,
     null
   )
   return res.data || {}
+}
+
+export async function getResumeParseStatus(resumeId: number): Promise<ResumeParseStatus> {
+  const res = await apiCall(
+    () => request.get(`/resumes/${resumeId}/parse-status`) as Promise<ApiResponse<ResumeParseStatus>>,
+    () => ({ resumeId, status: 'PENDING', statusLabel: '待解析', parseProgress: 10 })
+  )
+  return res.data
 }
 
 export async function confirmResume(resumeId: number, profile: UserProfileData): Promise<void> {
@@ -77,10 +102,9 @@ export async function confirmResume(resumeId: number, profile: UserProfileData):
 export async function reparseResume(resumeId: number): Promise<Resume> {
   const res = await apiCall(
     () => request.put(`/resumes/${resumeId}/reparse`) as Promise<ApiResponse<Resume>>,
-    () => null,
-    null
+    () => ({ resumeId, fileName: '', status: 'PENDING', statusLabel: '待解析', parseProgress: 10 })
   )
-  return res.data || { resumeId, fileName: '', status: 'PENDING' }
+  return res.data
 }
 
 export async function deleteResume(resumeId: number): Promise<void> {

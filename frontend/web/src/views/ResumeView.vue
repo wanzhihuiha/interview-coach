@@ -18,21 +18,25 @@
           <el-card>
             <el-table :data="resumes" stripe v-loading="loading">
               <el-table-column prop="fileName" label="简历名称" />
-              <el-table-column prop="jobCategory" label="岗位类型" />
+              <el-table-column prop="jobCategoryLabel" label="岗位类型" />
               <el-table-column label="状态" width="120">
                 <template #default="{ row }">
-                  <el-tag v-if="row.status === 'CONFIRMED'" type="success">已确认</el-tag>
-                  <el-tag v-else-if="row.status === 'PENDING_CONFIRM'" type="warning">待确认</el-tag>
-                  <el-tag v-else-if="row.status === 'PARSING'" type="info">解析中</el-tag>
-                  <el-tag v-else-if="row.status === 'PARSE_FAILED'" type="danger">解析失败</el-tag>
-                  <el-tag v-else type="info">待解析</el-tag>
+                  <el-tag :type="resumeStatusTagType(row.status)">{{ row.statusLabel || '未知状态' }}</el-tag>
+                  <el-progress
+                    v-if="isParseActive(row.status)"
+                    class="table-parse-progress"
+                    :percentage="progressFor(row)"
+                    :show-text="false"
+                    :stroke-width="4"
+                    :indeterminate="true"
+                  />
                 </template>
               </el-table-column>
               <el-table-column prop="createdAt" label="上传时间" />
               <el-table-column label="操作" width="220">
                 <template #default="{ row }">
                   <el-button link type="primary" @click="openDetail(row)">查看</el-button>
-                  <el-button link type="warning" @click="reparseResume(row.resumeId)">重新解析</el-button>
+                  <el-button link type="warning" :disabled="isParseActive(row.status)" @click="reparseResume(row.resumeId)">重新解析</el-button>
                   <el-button v-if="row.status === 'PENDING_CONFIRM'" link type="success" @click="confirmResume(row)">确认</el-button>
                   <el-button link type="danger" @click="removeResume(row.resumeId)">删除</el-button>
                 </template>
@@ -46,7 +50,15 @@
             <template #header>
               <span class="detail-title">简历详情预览</span>
             </template>
-            <div v-if="selectedResume.parsedData">
+            <div v-if="isParseActive(selectedResume.status)" class="parse-progress-panel">
+              <el-progress
+                :percentage="progressFor(selectedResume)"
+                :indeterminate="true"
+                :duration="2"
+              />
+              <p class="parse-status-text">{{ parseStatusText(selectedResume.status) }}</p>
+            </div>
+            <div v-else-if="selectedResume.parsedData">
               <h4 class="detail-section-title">基本信息</h4>
               <p class="detail-text">
                 姓名：{{ selectedResume.parsedData.basicInfo?.name || '未识别' }}（脱敏）<br>
@@ -86,7 +98,7 @@
                 <p class="detail-text">{{ proj.description }}</p>
               </div>
             </div>
-            <el-empty v-else description="暂无解析详情" />
+            <el-empty v-else :description="emptyDescription(selectedResume.status)" />
           </el-card>
           <el-card v-else class="detail-card">
             <el-empty description="选择左侧简历查看详情" />
@@ -102,11 +114,19 @@
         destroy-on-close
       >
         <div v-if="detailLoading" v-loading="detailLoading" class="dialog-loading" />
+        <div v-else-if="detailResume && isParseActive(detailResume.status)" class="parse-progress-panel dialog-progress-panel">
+          <el-progress
+            :percentage="progressFor(detailResume)"
+            :indeterminate="true"
+            :duration="2"
+          />
+          <p class="parse-status-text">{{ parseStatusText(detailResume.status) }}</p>
+        </div>
         <div v-else-if="detailResume?.parsedData" class="detail-dialog-body">
           <el-descriptions :column="2" border>
             <el-descriptions-item label="简历名称">{{ detailResume.fileName }}</el-descriptions-item>
-            <el-descriptions-item label="岗位类型">{{ detailResume.jobCategory || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="经验等级">{{ detailResume.experienceLevel || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="岗位类型">{{ detailResume.jobCategoryLabel || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="经验等级">{{ detailResume.experienceLevelLabel || '-' }}</el-descriptions-item>
             <el-descriptions-item label="置信度">{{ detailResume.parsedData.confidenceLevel }}</el-descriptions-item>
           </el-descriptions>
 
@@ -160,7 +180,7 @@
             <li v-for="(w, idx) in detailResume.parsedData.weaknesses" :key="idx">{{ w }}</li>
           </ul>
         </div>
-        <el-empty v-else description="暂无解析详情" />
+        <el-empty v-else :description="emptyDescription(detailResume?.status)" />
         <template #footer>
           <el-button @click="detailDialogVisible = false">关闭</el-button>
           <el-button v-if="detailResume && detailResume.status === 'PENDING_CONFIRM'" type="primary" @click="confirmFromDialog">确认解析结果</el-button>
@@ -171,12 +191,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import AppLayout from '@/components/AppLayout.vue'
-import { getResumeList, uploadResume, getResumeDetail, getResumeProfile, confirmResume as apiConfirmResume, deleteResume, reparseResume as apiReparseResume } from '@/api'
-import type { Resume, UserProfileData } from '@/types'
+import { getResumeList, uploadResume, getResumeDetail, getResumeProfile, getResumeParseStatus, confirmResume as apiConfirmResume, deleteResume, reparseResume as apiReparseResume } from '@/api'
+import type { Resume, ResumeParseStatus } from '@/types'
 import type { UploadFile } from 'element-plus'
 
 const resumes = ref<Resume[]>([])
@@ -185,17 +205,32 @@ const loading = ref(false)
 
 const detailDialogVisible = ref(false)
 const detailLoading = ref(false)
-const detailResume = ref<Resume & { parsedData?: UserProfileData; experienceLevel?: string } | null>(null)
+const detailResume = ref<Resume | null>(null)
+
+const POLL_INTERVAL_MS = 5000
+const MAX_POLL_ATTEMPTS = 36
+const pollingResumeIds = new Set<number>()
+const pollTimers = new Map<number, number>()
+const pollAttempts = new Map<number, number>()
 
 onMounted(loadResumes)
+onBeforeUnmount(stopAllPolling)
 
 async function loadResumes() {
   loading.value = true
   try {
-    resumes.value = await getResumeList()
+    resumes.value = (await getResumeList()).map(resume => ({
+      ...resume,
+      parseProgress: progressFor(resume)
+    }))
+    resumes.value.filter(resume => isParseActive(resume.status)).forEach(resume => {
+      startPolling(resume.resumeId)
+    })
     if (resumes.value.length > 0 && !selectedResume.value) {
       selectedResume.value = resumes.value[0]
-      await loadDetail(resumes.value[0])
+      if (!isParseActive(resumes.value[0].status)) {
+        await loadDetail(resumes.value[0])
+      }
     }
   } finally {
     loading.value = false
@@ -205,15 +240,21 @@ async function loadResumes() {
 async function loadDetail(resume: Resume) {
   try {
     const detail = await getResumeDetail(resume.resumeId)
+    if (!canLoadProfile(detail.status)) {
+      const merged = { ...resume, ...detail, parsedData: undefined, parseProgress: progressFor(detail) }
+      updateResumeState(merged)
+      return merged
+    }
     const profile = await getResumeProfile(resume.resumeId)
-    const merged = { ...detail, parsedData: profile.profile, experienceLevel: profile.experienceLevel }
-    const idx = resumes.value.findIndex(r => r.resumeId === resume.resumeId)
-    if (idx >= 0) {
-      resumes.value[idx] = merged
+    const merged = {
+      ...detail,
+      parsedData: profile.profile,
+      experienceLevel: profile.experienceLevel,
+      experienceLevelLabel: profile.experienceLevelLabel,
+      statusLabel: profile.statusLabel || detail.statusLabel,
+      parseProgress: 100
     }
-    if (selectedResume.value?.resumeId === resume.resumeId) {
-      selectedResume.value = merged
-    }
+    updateResumeState(merged)
     return merged
   } catch (error) {
     ElMessage.error((error as Error).message || '获取简历详情失败')
@@ -238,9 +279,10 @@ async function handleFileChange(uploadFile: UploadFile) {
   try {
     const resume = await uploadResume(uploadFile.raw)
     ElMessage.success('上传成功')
-    resumes.value.unshift(resume)
-    selectedResume.value = resume
-    await loadDetail(resume)
+    const pendingResume = { ...resume, parsedData: undefined, parseProgress: 10 }
+    resumes.value.unshift(pendingResume)
+    selectedResume.value = pendingResume
+    startPolling(resume.resumeId)
   } catch (error) {
     ElMessage.error((error as Error).message || '上传失败')
   }
@@ -275,13 +317,17 @@ async function reparseResume(resumeId: number) {
     const reparseResult = await apiReparseResume(resumeId)
     const idx = resumes.value.findIndex(r => r.resumeId === resumeId)
     if (idx >= 0) {
-      resumes.value[idx] = { ...resumes.value[idx], status: reparseResult.status }
+      resumes.value[idx] = {
+        ...resumes.value[idx],
+        status: reparseResult.status,
+        statusLabel: reparseResult.statusLabel,
+        parsedData: undefined,
+        parseProgress: reparseResult.parseProgress ?? 10
+      }
+      updateResumeState(resumes.value[idx])
     }
     ElMessage.success('重新解析已提交')
-    const resume = resumes.value.find(r => r.resumeId === resumeId)
-    if (resume) {
-      await loadDetail(resume)
-    }
+    startPolling(resumeId)
   } catch (error) {
     if ((error as Error).message !== 'cancel') {
       ElMessage.error((error as Error).message || '重新解析失败')
@@ -293,6 +339,7 @@ async function removeResume(resumeId: number) {
   try {
     await ElMessageBox.confirm('确定删除该简历吗？', '提示', { type: 'warning' })
     await deleteResume(resumeId)
+    stopPolling(resumeId)
     resumes.value = resumes.value.filter(r => r.resumeId !== resumeId)
     if (selectedResume.value?.resumeId === resumeId) {
       selectedResume.value = resumes.value[0] || null
@@ -301,6 +348,128 @@ async function removeResume(resumeId: number) {
   } catch {
     // 取消删除
   }
+}
+
+function isParseActive(status?: string) {
+  return status === 'PENDING' || status === 'PARSING'
+}
+
+function canLoadProfile(status?: string) {
+  return status === 'PENDING_CONFIRM' || status === 'CONFIRMED'
+}
+
+function progressFor(resume?: Pick<Resume, 'status' | 'parseProgress'> | null) {
+  if (resume?.parseProgress !== undefined) return resume.parseProgress
+  switch (resume?.status) {
+    case 'PARSING': return 50
+    case 'PENDING_CONFIRM':
+    case 'CONFIRMED': return 100
+    case 'PARSE_FAILED': return 0
+    default: return 10
+  }
+}
+
+function parseStatusText(status?: string) {
+  return status === 'PARSING' ? 'AI 正在分析简历，请稍候' : '解析任务正在排队'
+}
+
+function emptyDescription(status?: string) {
+  return status === 'PARSE_FAILED' ? '简历解析失败，请重新解析' : '暂无解析详情'
+}
+
+function updateResumeState(updated: Resume) {
+  const idx = resumes.value.findIndex(resume => resume.resumeId === updated.resumeId)
+  if (idx >= 0) {
+    resumes.value[idx] = { ...resumes.value[idx], ...updated }
+  }
+  if (selectedResume.value?.resumeId === updated.resumeId) {
+    selectedResume.value = { ...selectedResume.value, ...updated }
+  }
+  if (detailResume.value?.resumeId === updated.resumeId) {
+    detailResume.value = { ...detailResume.value, ...updated }
+  }
+}
+
+function startPolling(resumeId: number) {
+  if (pollingResumeIds.has(resumeId)) return
+  pollingResumeIds.add(resumeId)
+  pollAttempts.set(resumeId, 0)
+  scheduleNextPoll(resumeId)
+}
+
+function scheduleNextPoll(resumeId: number) {
+  const timer = window.setTimeout(() => {
+    pollTimers.delete(resumeId)
+    void pollResumeStatus(resumeId)
+  }, POLL_INTERVAL_MS)
+  pollTimers.set(resumeId, timer)
+}
+
+async function pollResumeStatus(resumeId: number) {
+  if (!pollingResumeIds.has(resumeId)) return
+  const attempts = (pollAttempts.get(resumeId) || 0) + 1
+  pollAttempts.set(resumeId, attempts)
+
+  try {
+    const parseStatus = await getResumeParseStatus(resumeId)
+    applyParseStatus(parseStatus)
+    if (!isParseActive(parseStatus.status)) {
+      stopPolling(resumeId)
+      const resume = resumes.value.find(item => item.resumeId === resumeId)
+      if (resume && canLoadProfile(parseStatus.status)) {
+        await loadDetail(resume)
+        ElMessage.success('简历画像解析完成，请查看并确认')
+      } else if (parseStatus.status === 'PARSE_FAILED') {
+        ElMessage.error('简历解析失败，请重新解析')
+      }
+      return
+    }
+  } catch {
+    // 短暂网络错误不改变后端任务状态，下一轮继续查询。
+  }
+
+  if (attempts >= MAX_POLL_ATTEMPTS) {
+    stopPolling(resumeId)
+    ElMessage.warning('简历解析耗时较长，可稍后刷新查看结果')
+    return
+  }
+  scheduleNextPoll(resumeId)
+}
+
+function applyParseStatus(parseStatus: ResumeParseStatus) {
+  const current = resumes.value.find(resume => resume.resumeId === parseStatus.resumeId)
+  if (!current) return
+  updateResumeState({
+    ...current,
+    status: parseStatus.status,
+    statusLabel: parseStatus.statusLabel,
+    parseProgress: parseStatus.parseProgress,
+    updatedAt: parseStatus.updatedAt,
+    parsedData: isParseActive(parseStatus.status) || parseStatus.status === 'PARSE_FAILED'
+      ? undefined
+      : current.parsedData
+  })
+}
+
+function stopPolling(resumeId: number) {
+  const timer = pollTimers.get(resumeId)
+  if (timer !== undefined) {
+    window.clearTimeout(timer)
+  }
+  pollTimers.delete(resumeId)
+  pollAttempts.delete(resumeId)
+  pollingResumeIds.delete(resumeId)
+}
+
+function stopAllPolling() {
+  Array.from(pollingResumeIds).forEach(stopPolling)
+}
+
+function resumeStatusTagType(status: string) {
+  if (status === 'CONFIRMED') return 'success'
+  if (status === 'PENDING_CONFIRM') return 'warning'
+  if (status === 'PARSE_FAILED') return 'danger'
+  return 'info'
 }
 </script>
 
@@ -320,6 +489,29 @@ async function removeResume(resumeId: number) {
 
 .detail-card {
   min-height: 400px;
+}
+
+.table-parse-progress {
+  width: 72px;
+  margin-top: 6px;
+}
+
+.parse-progress-panel {
+  padding: 32px 12px;
+}
+
+.dialog-progress-panel {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.parse-status-text {
+  margin: 14px 0 0;
+  color: #606266;
+  font-size: 14px;
+  text-align: center;
 }
 
 .detail-title {

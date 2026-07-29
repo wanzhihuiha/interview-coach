@@ -23,7 +23,7 @@
                 class="selection-item"
               >
                 <div class="selection-name">{{ resume.fileName }}</div>
-                <div class="selection-meta">{{ resume.jobCategory }} · {{ resume.status === 'CONFIRMED' ? '已确认' : '待确认' }}</div>
+                <div class="selection-meta">{{ resume.jobCategoryLabel || '岗位类别待识别' }} · {{ resume.statusLabel || '状态未知' }}</div>
               </el-radio>
             </el-radio-group>
           </el-card>

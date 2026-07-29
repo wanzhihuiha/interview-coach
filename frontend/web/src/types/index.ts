@@ -20,10 +20,23 @@ export interface Resume {
   fileType?: string
   fileSize?: number
   status: string
+  statusLabel?: string
   jobCategory?: string
+  jobCategoryLabel?: string
+  experienceLevel?: string
+  experienceLevelLabel?: string
   createdAt?: string
   updatedAt?: string
   parsedData?: UserProfileData
+  parseProgress?: number
+}
+
+export interface ResumeParseStatus {
+  resumeId: number
+  status: string
+  statusLabel?: string
+  parseProgress: number
+  updatedAt?: string
 }
 
 export interface UserProfileData {
