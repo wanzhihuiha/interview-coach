@@ -13,7 +13,7 @@ Interview Coach 是一个面向求职者的 AI 模拟面试平台。系统基于
 - 岗位 JD 录入、解析、确认和公共岗位管理
 - 个性化模拟面试、回答记录、面试报告和成长计划
 - 用户、岗位、题库和审计日志的后台管理
-- 多模型路由及无 API Key 时的 Mock 降级
+- 多模型路由及显式的真实模型 / Mock 切换
 
 ## 技术栈
 
@@ -56,9 +56,13 @@ CREATE DATABASE interview_coach
   COLLATE utf8mb4_unicode_ci;
 ```
 
-数据库创建完成后，先手工执行
-`backend/src/main/resources/db/migration/V1__init_schema.sql`，创建当前版本所需的全部表，
-再启动后端。Hibernate 仅校验实体与表结构是否一致，不会自动创建或修改数据库结构。
+数据库创建完成后，按顺序手工执行以下当前迁移基线，再启动后端：
+
+1. `backend/src/main/resources/db/migration/V1__init_schema.sql`
+2. `backend/src/main/resources/db/migration/V2__resume_profile_draft_analysis.sql`
+3. `backend/src/main/resources/db/migration/V3__resume_ai_task_control.sql`
+
+不要修改已经执行的版本化脚本。Hibernate 仅校验实体与表结构是否一致，不会自动创建或修改数据库结构。
 
 后端默认读取以下环境变量。请根据本机环境设置，不要将真实密码或密钥提交到仓库。
 
@@ -92,12 +96,11 @@ mvn spring-boot:run
 
 后端默认运行在 `http://localhost:8080`，接口统一使用 `/api/v1` 前缀。
 
-默认配置关闭真实大模型调用，未配置 API Key 也可以启动。需要接入真实模型时，请在 `backend/src/main/resources/application.yml` 中启用对应厂商，并通过环境变量提供 API Key：
+仓库中的不同 Profile 可能启用真实模型，不能假设未配置 API Key 时会自动切换 Mock。启动前请检查 `resume.llm.enabled` 和目标厂商的 `enabled`；需要确保不发送外部请求时，将 `RESUME_LLM_ENABLED=false`。启用真实模型时，应把厂商 API Key 配置成环境变量占位符，不要把真实凭据写入共享配置或提交到 Git。当前预留的厂商环境变量包括：
 
 - `DASHSCOPE_API_KEY`
 - `OPENAI_API_KEY`
 - `ZHIPU_API_KEY`
-- `MINIMAX_API_KEY`
 
 ### 3. 启动前端
 
@@ -118,7 +121,7 @@ npm run dev
 ## 数据库结构管理
 
 - MySQL 表结构由人工执行的版本化 SQL 管理，脚本位于 `backend/src/main/resources/db/migration/`。
-- 首次初始化执行 `V1__init_schema.sql`；后续结构变化新增并按顺序手工执行 `V2__...sql`、`V3__...sql`。
+- 当前新环境依次执行 `V1__init_schema.sql`、`V2__resume_profile_draft_analysis.sql`、`V3__resume_ai_task_control.sql`；后续结构变化继续追加更高版本脚本。
 - 已执行过的 SQL 文件不得修改，并应在部署记录中登记数据库已执行到的版本。
 - 默认配置使用 `spring.jpa.hibernate.ddl-auto=validate`，启动时只校验表结构。
 - `backend/src/main/resources/db/schema.sql` 是旧入口的废弃提示，不参与初始化。

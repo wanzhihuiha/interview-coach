@@ -1,15 +1,44 @@
 # 数据库设计文档
 
-> 本文档记录 interview-coach 项目的数据库设计，包括 ER 图、表结构、索引策略、DDL 脚本。
->
-> **现状说明：**本文档中的前缀表名和 DDL 保留的是早期设计方案，与当前实体并不完全一致。
-> 当前可执行、受版本管理的 MySQL 基线以
-> `backend/src/main/resources/db/migration/V1__init_schema.sql` 为准；该脚本由维护者手工执行，
-> 后续结构变化通过新的版本化 SQL 演进。
+> 本文档同时保留当前迁移基线和早期概念设计。**唯一可执行、受版本管理的 MySQL 结构来源**是
+> `backend/src/main/resources/db/migration/` 中按顺序手工执行的版本化脚本：
+> `V1__init_schema.sql` → `V2__resume_profile_draft_analysis.sql` → `V3__resume_ai_task_control.sql`。
+> 本文后续带 `sys_`、`res_`、`pos_` 等前缀的 ER、表结构和 DDL 是早期方案，与当前实体和真实表名不完全一致，禁止复制到数据库执行。
+
+### 当前简历画像迁移基线（V1 + V2 + V3）
+
+| 迁移 | 对象 | 变更与用途 |
+|------|------|------------|
+| V1 | `resume`、`resume_profile`、`interview` | 建立简历、正式画像和面试基础表 |
+| V2 | `resume` | 新增解析 generation、开始时间和稳定错误字段，拒绝旧事实解析任务写回 |
+| V2 | `resume_profile_draft` | 新表，每份简历唯一当前草稿，保存当前解析代次的 LLM 事实结果及用户修改 |
+| V2 | `resume_profile` | 新增正式事实 hash、Schema 版本和确认时间 |
+| V2 | `resume_profile_analysis` | 新表，每份简历唯一一行，保存辅助分析结果及基础任务状态 |
+| V2 | `interview.user_profile_analysis` | 新增可空快照；创建面试时固定当时可用的辅助分析，缺失不阻断 |
+| V3 | `resume` | 新增 `parse_quota_date`、`parse_quota_token`，供手动事实解析额度崩溃恢复 |
+| V3 | `resume_profile_analysis` | 放宽结果 hash 可空约束，并新增独立任务、首次资格、面试可用性和额度恢复字段 |
+
+#### V3 单行辅助分析字段语义
+
+| 字段 | 数据库约束 | 语义 |
+|------|------------|------|
+| `source_profile_hash` | `VARCHAR(64) NULL` | 只描述最近成功结果依据的正式事实 hash；没有成功结果时为空 |
+| `analysis_data`、`schema_version`、`prompt_version`、`model_name`、`generated_at` | 沿用 V2 | 最近成功结果及其生成元数据；准备或失败新任务时不清空 |
+| `task_profile_hash` | `VARCHAR(64) NULL` | 当前任务依据的正式事实 hash |
+| `task_generation` | `BIGINT NOT NULL DEFAULT 0` | 当前任务代次；每次登记新任务单调递增 |
+| `task_mode` | `VARCHAR(30) NULL` | 当前内部模式：`INITIAL/REGENERATE/REFINE` |
+| `status`、`error_code`、`error_message` | 沿用 V2 | 最新任务状态和错误；不代表是否存在保留成功结果 |
+| `initial_model_call_started` | `BIT(1) NOT NULL DEFAULT 0` | 首次免费分析是否真正越过模型调用边界；只允许幂等从 false 变为 true |
+| `usable_for_interview` | `BIT(1) NOT NULL DEFAULT 0` | 最近成功结果当前是否允许进入新面试；新任务登记和失败均为 false |
+| `task_quota_date`、`task_quota_token` | 可空 | 手动分析额度的非敏感恢复凭据；Redis 结算明确成功后清理 |
+
+`resume_profile_analysis` 仍由 `resume_id` 唯一约束保证每份简历最多一行，不新增历史版本或持久任务队列表，也不持久化 `feedback`。最终结果写回由应用同时校验 `userId + task_generation + task_profile_hash + 当前正式事实 hash`。V3 只追加列并放宽 `source_profile_hash` 可空约束，不修改已经执行的 V2，也不回填或删除业务正文。
+
+迁移脚本继续由维护者手工执行。启动包含 V3 实体映射的新代码前，应先确认目标库、备份/回滚入口和三份脚本的执行状态，再显式验证 Hibernate `ddl-auto=validate`；文档静态核对不能替代目标 MySQL 验证。
 
 ---
 
-## 1. 数据库架构
+## 1. 早期数据库架构（概念参考）
 
 ### 1.1 库设计
 
@@ -30,7 +59,7 @@
 
 ---
 
-## 2. ER 图
+## 2. 早期概念 ER 图
 
 ### 2.1 整体 ER 关系
 
@@ -64,7 +93,7 @@ erDiagram
 
 ---
 
-## 3. 表结构设计
+## 3. 早期表结构设计（概念参考）
 
 ### 3.1 系统基础表（sys_）
 
@@ -143,7 +172,7 @@ erDiagram
 | user_id | BIGINT | FK, NOT NULL | 用户ID |
 | resume_name | VARCHAR(100) | NOT NULL | 简历名称 |
 | file_path | VARCHAR(500) | | 简历文件存储路径 |
-| file_type | VARCHAR(20) | | 文件类型：PDF/TXT/DOC |
+| file_type | VARCHAR(20) | | 文件类型：PDF/TXT |
 | file_size | BIGINT | | 文件大小（字节） |
 | parse_status | TINYINT | NOT NULL, DEFAULT 0 | 解析状态：0待解析 1解析中 2待确认 3已确认 4解析失败 |
 | job_category | VARCHAR(20) | | 岗位大类：TECH/PRODUCT/DESIGN等 |
@@ -585,7 +614,7 @@ erDiagram
 
 ---
 
-## 4. 索引策略
+## 4. 早期索引策略（概念参考）
 
 ### 4.1 索引设计原则
 
@@ -610,7 +639,9 @@ erDiagram
 
 ---
 
-## 5. DDL 脚本
+## 5. 早期 DDL 示例（禁止执行）
+
+> 以下 SQL 仅保留早期设计上下文，表名、字段名、状态类型和当前迁移均不一致。初始化或升级数据库只能使用 `backend/src/main/resources/db/migration/` 下的版本化脚本。
 
 ### 5.1 创建数据库
 
@@ -677,7 +708,7 @@ CREATE TABLE res_resume (
     user_id BIGINT NOT NULL COMMENT '用户ID',
     resume_name VARCHAR(100) NOT NULL COMMENT '简历名称',
     file_path VARCHAR(500) COMMENT '简历文件存储路径',
-    file_type VARCHAR(20) COMMENT '文件类型：PDF/TXT/DOC',
+    file_type VARCHAR(20) COMMENT '文件类型：PDF/TXT',
     file_size BIGINT COMMENT '文件大小（字节）',
     parse_status TINYINT NOT NULL DEFAULT 0 COMMENT '解析状态：0待解析 1解析中 2待确认 3已确认 4解析失败',
     job_category VARCHAR(20) COMMENT '岗位大类：TECH/PRODUCT/DESIGN等',
@@ -981,6 +1012,6 @@ CREATE TABLE inf_llm_call_log (
 
 ---
 
-*文档版本：v0.3*
+*文档版本：v0.4*
 *创建时间：2026-07-20*
-*更新说明：消除画像表冗余字段、增加题库表、优化 iv_interview 索引、新增断线恢复字段*
+*更新说明：明确 V1→V2→V3 可执行基线，补充 V3 单行分析状态语义，并将旧前缀 ER/DDL 标记为不可执行的概念参考*

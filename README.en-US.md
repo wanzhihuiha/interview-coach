@@ -13,7 +13,7 @@ Interview Coach is an AI-powered mock interview platform for job seekers. It gen
 - Job description entry, parsing, confirmation, and public position management
 - Personalized mock interviews, answer history, interview reports, and growth plans
 - Administration for users, positions, question banks, and audit logs
-- Multi-model routing with a mock fallback when no API key is configured
+- Multi-model routing with an explicit real-model / mock switch
 
 ## Tech Stack
 
@@ -56,9 +56,13 @@ CREATE DATABASE interview_coach
   COLLATE utf8mb4_unicode_ci;
 ```
 
-After creating the database, manually execute
-`backend/src/main/resources/db/migration/V1__init_schema.sql` to create all tables required by the current version,
-then start the backend. Hibernate only validates the entity mappings and never creates or modifies the schema automatically.
+After creating the database, manually execute the current migration baseline in this order, then start the backend:
+
+1. `backend/src/main/resources/db/migration/V1__init_schema.sql`
+2. `backend/src/main/resources/db/migration/V2__resume_profile_draft_analysis.sql`
+3. `backend/src/main/resources/db/migration/V3__resume_ai_task_control.sql`
+
+Never edit an applied versioned script. Hibernate only validates the entity mappings and never creates or modifies the schema automatically.
 
 The backend reads the following environment variables. Set them for your local environment, and never commit real passwords or secrets to the repository.
 
@@ -92,12 +96,11 @@ mvn spring-boot:run
 
 The backend runs at `http://localhost:8080` by default. All API endpoints use the `/api/v1` prefix.
 
-Real LLM calls are disabled in the default configuration, so the application can start without an API key. To use a real model, enable the corresponding vendor in `backend/src/main/resources/application.yml` and provide its API key through an environment variable:
+Different repository profiles may enable a real model, so do not assume that a missing API key automatically selects the mock implementation. Before startup, check `resume.llm.enabled` and the selected vendor's `enabled` flag. Set `RESUME_LLM_ENABLED=false` when external model calls must be disabled. When enabling a real model, configure its API key through an environment-variable placeholder and never commit a real credential to shared configuration. The currently reserved vendor variables are:
 
 - `DASHSCOPE_API_KEY`
 - `OPENAI_API_KEY`
 - `ZHIPU_API_KEY`
-- `MINIMAX_API_KEY`
 
 ### 3. Start the Frontend
 
@@ -118,7 +121,7 @@ Open `http://localhost:5173`. The development server proxies `/api` requests to 
 ## Database Schema Management
 
 - Manually executed versioned SQL manages the MySQL schema. Scripts are stored in `backend/src/main/resources/db/migration/`.
-- Run `V1__init_schema.sql` for initial setup. Add and manually run `V2__...sql`, `V3__...sql`, and later versions for subsequent changes.
+- For a new environment, run `V1__init_schema.sql`, `V2__resume_profile_draft_analysis.sql`, and `V3__resume_ai_task_control.sql` in order. Add higher-version scripts for subsequent changes.
 - Never edit an applied SQL file, and record the latest applied version in deployment records.
 - The default profile uses `spring.jpa.hibernate.ddl-auto=validate`, so Hibernate only validates the schema.
 - `backend/src/main/resources/db/schema.sql` is a deprecation notice for the old entry point and is not executed.

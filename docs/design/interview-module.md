@@ -1,5 +1,7 @@
 # 面试模块详细设计
 
+> **当前简历画像接入基线（2026-07）**：创建面试时固定用户已确认的事实画像快照，并在当前有效 AI 分析存在时同时固定辅助分析快照。辅助分析缺失或损坏不阻断面试，只作为出题和追问线索，不传给评估器，也不直接参与评分。
+
 > 本文档记录面试模块的详细设计，包括功能定义、数据结构、接口设计、业务流程等。
 
 ---
@@ -64,7 +66,8 @@
 | userId | Long | FK, NOT NULL, INDEX | 用户ID |
 | resumeId | Long | FK, NOT NULL | 简历ID |
 | positionId | Long | FK, NOT NULL | 岗位ID |
-| userProfile | JSON | | 用户画像（快照） |
+| userProfile | JSON | | 用户已确认事实画像（快照） |
+| userProfileAnalysis | JSON | | 可选 AI 辅助分析（快照） |
 | positionProfile | JSON | | 岗位画像（快照） |
 | selectedPhases | JSON | NOT NULL | 用户选择的环节列表（已排序） |
 | currentPhase | Enum | NOT NULL | 当前环节 |
@@ -202,7 +205,8 @@ public enum KeyEventType {
 public class InterviewContext {
     Long interviewId;
     Long userId;
-    ResumeProfile userProfile;      // 用户画像（快照）
+    ResumeProfile userProfile;      // 已确认事实画像（快照）
+    ResumeProfileAnalysisData userProfileAnalysis; // 可选选题线索，不参与评分
     PositionProfile positionProfile; // 岗位画像（快照）
 
     // 环节相关
@@ -1056,8 +1060,9 @@ public class InterviewerAgent {
 ```
 
 **面试官 Agent 可见信息约束**：
-- 可见：用户画像摘要、岗位画像、最近 Q&A、主题摘要、精简评估信号
+- 可见：用户事实画像摘要、可选辅助分析、岗位画像、最近 Q&A、主题摘要、精简评估信号
 - 不可见：详细评估得分、完整评语、维度分析
+- 辅助分析中的优势、待验证点和推断技能水平必须在回答中再次验证，不得直接作为评分或结论
 
 ### 6.2.1 问题生成策略
 
