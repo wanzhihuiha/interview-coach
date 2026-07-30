@@ -29,6 +29,11 @@ export interface Resume {
   updatedAt?: string
   parsedData?: UserProfileData
   parseProgress?: number
+  hasConfirmedProfile?: boolean
+  parseGeneration?: number
+  analysis?: ResumeProfileAnalysisData
+  analysisStatus?: string
+  analysisErrorMessage?: string
 }
 
 export interface ResumeParseStatus {
@@ -36,6 +41,10 @@ export interface ResumeParseStatus {
   status: string
   statusLabel?: string
   parseProgress: number
+  hasConfirmedProfile?: boolean
+  parseGeneration?: number
+  analysisStatus?: string
+  analysisErrorMessage?: string
   updatedAt?: string
 }
 
@@ -45,15 +54,28 @@ export interface UserProfileData {
   skillLevel?: Record<string, string>
   projectExperience?: ProjectExperience[]
   workExperience?: WorkExperience[]
-  strengths?: string[]
-  weaknesses?: string[]
-  confidenceLevel?: number
+}
+
+export interface ResumeAnalysisItem {
+  content: string
+  evidenceRefs?: string[]
+  confidence?: number
+}
+
+export interface ResumeSkillAssessment {
+  skill: string
+  inferredLevel: string
+  evidenceRefs?: string[]
+  confidence?: number
+}
+
+export interface ResumeProfileAnalysisData {
+  strengths?: ResumeAnalysisItem[]
+  verificationPoints?: ResumeAnalysisItem[]
+  skillAssessments?: ResumeSkillAssessment[]
 }
 
 export interface BasicInfo {
-  name?: string
-  age?: string
-  gender?: string
   workingYears?: string
   currentPosition?: string
   education?: string
@@ -88,6 +110,7 @@ export interface Position {
   parseStatusLabel?: string
   auditStatus: string
   auditStatusLabel?: string
+  isPublic?: boolean
   createdAt?: string
   updatedAt?: string
   profile?: PositionProfileData

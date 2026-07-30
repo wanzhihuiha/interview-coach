@@ -39,9 +39,11 @@ const progressPercent = computed(() => {
 
 <style scoped>
 .interview-progress {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
+  min-height: 600px;
+  border-radius: var(--radius-panel);
+  padding: 26px;
+  color: var(--color-on-console);
+  background: var(--color-console-soft);
 }
 
 .progress-header {
@@ -53,12 +55,12 @@ const progressPercent = computed(() => {
 
 .progress-title {
   font-weight: 600;
-  color: #303133;
+  color: var(--color-on-console);
 }
 
 .progress-text {
   font-size: 14px;
-  color: #409EFF;
+  color: var(--color-brand-500);
   font-weight: 600;
 }
 
@@ -71,8 +73,8 @@ const progressPercent = computed(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 0;
-  color: #909399;
-  border-bottom: 1px solid #f0f2f5;
+  color: #8f8e88;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .phase-item:last-child {
@@ -80,11 +82,11 @@ const progressPercent = computed(() => {
 }
 
 .phase-item.completed {
-  color: #67C23A;
+  color: var(--color-success);
 }
 
 .phase-item.current {
-  color: #409EFF;
+  color: var(--color-brand-500);
   font-weight: 600;
 }
 

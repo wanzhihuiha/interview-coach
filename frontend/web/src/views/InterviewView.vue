@@ -9,7 +9,11 @@
 
       <template v-else>
         <div class="interview-header">
-          <span class="interview-title">{{ isEnded ? '面试详情' : '面试进行中' }} · {{ session.positionTitle }} · 第 {{ currentQuestionNumber }} 题</span>
+          <div class="interview-heading">
+            <span class="page-eyebrow">LIVE INTERVIEW</span>
+            <h1 class="interview-title">{{ isEnded ? '面试详情' : '面试进行中' }}</h1>
+            <p>{{ session.positionTitle }} · 第 {{ currentQuestionNumber }} 题</p>
+          </div>
           <div class="header-actions">
             <el-button v-if="isEnded" type="success" link @click="viewReport">查看报告</el-button>
             <el-button type="danger" link @click="handleInterrupt">{{ isEnded ? '离开' : '中断面试' }}</el-button>
@@ -20,9 +24,9 @@
           <el-col :span="16">
             <el-card class="question-card">
               <div class="current-info">
-                <el-tag type="primary">📍 当前环节：{{ currentPhaseName }}</el-tag>
-                <el-tag type="info">📍 当前主题：{{ currentTopic || '-' }}</el-tag>
-                <el-tag type="warning">📍 当前深度：L{{ currentDepth }}</el-tag>
+                <el-tag type="primary">当前环节 · {{ currentPhaseName }}</el-tag>
+                <el-tag type="info">当前主题 · {{ currentTopic || '-' }}</el-tag>
+                <el-tag type="warning">问题深度 · L{{ currentDepth }}</el-tag>
               </div>
 
               <div class="interviewer-area">
@@ -72,13 +76,16 @@
           </el-col>
         </el-row>
 
-        <p class="interview-tip">💡 提示：回答完成后，面试官会根据回答质量决定是否追问或切换主题</p>
+        <p class="interview-tip">
+          <el-icon><InfoFilled /></el-icon>
+          <span>回答提交后，面试官会根据内容决定继续追问或切换主题。</span>
+        </p>
 
         <!-- 环节切换弹窗 -->
         <el-dialog v-model="phaseChangeVisible" title="环节切换" width="400px" :show-close="false" :close-on-click-modal="false">
           <div class="phase-change-content">
-            <el-icon :size="48" color="#67C23A"><CircleCheck /></el-icon>
-            <h3>✅ {{ previousPhaseName }}环节完成</h3>
+            <el-icon class="phase-complete-icon" :size="48"><CircleCheck /></el-icon>
+            <h3>{{ previousPhaseName }}环节完成</h3>
             <p>即将进入：{{ nextPhaseName }}</p>
           </div>
           <template #footer>
@@ -86,6 +93,22 @@
           </template>
         </el-dialog>
       </template>
+
+      <ActionConfirmDialog
+        v-model="exitDialogVisible"
+        :title="exitActionContent.title"
+        :description="exitActionContent.description"
+        subject-label="当前面试"
+        :subject="session?.positionTitle || '模拟面试'"
+        :confirm-text="exitActionContent.confirmText"
+        :cancel-text="exitActionContent.cancelText"
+        :loading-text="exitActionContent.loadingText"
+        :tone="pendingExitAction === 'interrupt' ? 'danger' : 'primary'"
+        :impact="exitActionContent.impact"
+        :loading="exitDialogLoading"
+        @confirm="executeInterviewExit"
+        @closed="resetExitDialog"
+      />
     </div>
   </AppLayout>
 </template>
@@ -93,13 +116,41 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleCheck } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { CircleCheck, InfoFilled } from '@element-plus/icons-vue'
+import ActionConfirmDialog from '@/components/ActionConfirmDialog.vue'
 import AppLayout from '@/components/AppLayout.vue'
 import InterviewProgress from '@/components/InterviewProgress.vue'
 import { getInterview, getInterviewMessages, submitAnswer, endInterview } from '@/api'
 import { ensureTokenFresh } from '@/api/auth'
 import type { InterviewSession, InterviewMessage } from '@/types'
+
+type ExitAction = 'interrupt' | 'leave'
+
+const EXIT_ACTION_CONTENT = {
+  interrupt: {
+    title: '中断当前面试？',
+    description: '职衡会结束本次作答流程，并把这场面试标记为已中断。',
+    confirmText: '中断面试',
+    cancelText: '继续面试',
+    loadingText: '正在中断',
+    impact: [
+      { label: '面试状态', value: '立即标记为已中断' },
+      { label: '已产生记录', value: '仍可在历史记录中查看' }
+    ]
+  },
+  leave: {
+    title: '离开面试详情？',
+    description: '本次面试已经结束，离开不会改变面试记录或报告。',
+    confirmText: '离开详情',
+    cancelText: '留在此页',
+    loadingText: '正在离开',
+    impact: [
+      { label: '面试记录', value: '保持不变' },
+      { label: '返回位置', value: '历史记录' }
+    ]
+  }
+} as const
 
 const route = useRoute()
 const router = useRouter()
@@ -115,6 +166,9 @@ const phaseChangeVisible = ref(false)
 const previousPhaseName = ref('')
 const nextPhaseName = ref('')
 const isEnded = ref(false)
+const exitDialogVisible = ref(false)
+const exitDialogLoading = ref(false)
+const pendingExitAction = ref<ExitAction | null>(null)
 let abortController: { abort: () => void } | null = null
 let tokenRefreshTimer: number | null = null
 
@@ -130,6 +184,7 @@ const currentPhaseName = computed(() => {
 const currentTopic = computed(() => currentQuestion.value?.topic || '-')
 const currentDepth = computed(() => currentQuestion.value?.depth ?? 1)
 const currentQuestionNumber = computed(() => messages.value.filter(m => m.role === 'interviewer').length)
+const exitActionContent = computed(() => EXIT_ACTION_CONTENT[pendingExitAction.value || 'leave'])
 
 onMounted(async () => {
   try {
@@ -168,6 +223,11 @@ onUnmounted(() => {
 })
 
 function typewriter(text: string) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    displayedQuestion.value = text
+    thinking.value = false
+    return
+  }
   displayedQuestion.value = ''
   thinking.value = true
   let index = 0
@@ -265,17 +325,34 @@ async function handleSubmit() {
   })
 }
 
-async function handleInterrupt() {
+function handleInterrupt() {
+  if (exitDialogLoading.value) return
+  pendingExitAction.value = isEnded.value ? 'leave' : 'interrupt'
+  exitDialogVisible.value = true
+}
+
+async function executeInterviewExit() {
+  const action = pendingExitAction.value
+  if (!action || exitDialogLoading.value) return
+
+  exitDialogLoading.value = true
   try {
-    const action = isEnded.value ? '离开' : '中断'
-    await ElMessageBox.confirm(`确定要${action}当前面试吗？`, '提示', { type: 'warning' })
-    if (!isEnded.value) {
+    if (action === 'interrupt') {
       await endInterview(interviewId)
     }
-    router.push('/history')
-  } catch {
-    // 取消
+    exitDialogVisible.value = false
+    await router.push('/history')
+  } catch (error) {
+    const fallback = action === 'interrupt' ? '中断面试失败' : '离开面试详情失败'
+    ElMessage.error((error as Error).message || fallback)
+  } finally {
+    exitDialogLoading.value = false
   }
+}
+
+function resetExitDialog() {
+  if (exitDialogVisible.value || exitDialogLoading.value) return
+  pendingExitAction.value = null
 }
 
 function viewReport() {
@@ -285,20 +362,32 @@ function viewReport() {
 
 <style scoped>
 .interview-page {
-  padding-bottom: 40px;
+  padding-bottom: 56px;
 }
 
 .interview-header {
   display: flex;
+  min-height: 96px;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  gap: 32px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 28px;
+  padding-bottom: 22px;
+}
+
+.interview-heading p {
+  margin: 9px 0 0;
+  color: var(--color-muted);
+  font-size: 14px;
 }
 
 .interview-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 30px;
+  font-weight: 720;
+  line-height: 1.2;
 }
 
 .header-actions {
@@ -312,6 +401,7 @@ function viewReport() {
 
 .question-card {
   min-height: 600px;
+  border-top: 2px solid var(--color-ink);
 }
 
 .current-info {
@@ -323,7 +413,7 @@ function viewReport() {
 
 .area-label {
   font-size: 14px;
-  color: #606266;
+  color: var(--color-body);
   margin-bottom: 8px;
 }
 
@@ -332,16 +422,17 @@ function viewReport() {
 }
 
 .bubble {
-  padding: 16px;
-  border-radius: 8px;
-  background: #f5f7fa;
-  color: #303133;
+  min-height: 96px;
+  border-left: 3px solid var(--color-brand-500);
+  border-radius: var(--radius-sm);
+  padding: 22px 24px;
+  color: var(--color-ink);
+  background: var(--color-surface-subtle);
   line-height: 1.8;
-  min-height: 80px;
 }
 
 .thinking-text {
-  color: #909399;
+  color: var(--color-muted);
   font-style: italic;
 }
 
@@ -358,9 +449,16 @@ function viewReport() {
 }
 
 .interview-tip {
-  margin-top: 16px;
-  color: #909399;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  color: var(--color-muted);
   font-size: 13px;
+}
+
+.interview-tip .el-icon {
+  color: var(--color-brand-600);
 }
 
 .phase-change-content {
@@ -370,6 +468,10 @@ function viewReport() {
 
 .phase-change-content h3 {
   margin: 16px 0 8px;
+}
+
+.phase-complete-icon {
+  color: var(--color-success);
 }
 
 .empty-interview {

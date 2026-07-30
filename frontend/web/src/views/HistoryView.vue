@@ -1,7 +1,13 @@
 <template>
   <AppLayout>
     <div class="page-container">
-      <h2 class="page-title">面试历史</h2>
+      <header class="page-header">
+        <div class="page-heading-copy">
+          <span class="page-eyebrow">INTERVIEW RECORDS</span>
+          <h1 class="page-title">面试历史</h1>
+          <p class="page-subtitle">回看每次面试状态、报告和成长方案，持续沉淀可比较的表现记录。</p>
+        </div>
+      </header>
 
       <el-card>
         <div class="filter-bar">
@@ -143,13 +149,6 @@ function statusTagType(status: InterviewSession['status']) {
 </script>
 
 <style scoped>
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 20px;
-}
-
 .filter-bar {
   display: flex;
   gap: 12px;

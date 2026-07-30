@@ -2,7 +2,12 @@
   <AppLayout>
     <div class="page-container">
       <div class="page-header">
-        <h2 class="page-title">成长方案</h2>
+        <div class="page-heading-copy">
+          <span class="page-eyebrow">GROWTH PATH</span>
+          <h1 class="page-title">{{ plan ? `成长方案 · ${plan.positionTitle}` : '成长方案' }}</h1>
+          <p class="page-subtitle">把面试反馈转化为学习路径、知识补全与可执行练习。</p>
+        </div>
+        <el-button v-if="plan" type="primary" :icon="Download" @click="downloadMd">下载 MD</el-button>
       </div>
 
       <div v-if="!plan" class="empty-growth">
@@ -12,14 +17,9 @@
       </div>
 
       <template v-else>
-        <div class="page-header">
-          <h2 class="page-title">成长方案 · {{ plan?.positionTitle }}</h2>
-          <el-button type="primary" :icon="Download" @click="downloadMd">下载 MD</el-button>
-        </div>
-
         <el-row :gutter="24">
         <el-col :span="16">
-          <el-card>
+          <div class="growth-workspace">
             <div class="growth-content">
               <section class="growth-section">
                 <h3>一、学习路径</h3>
@@ -90,7 +90,7 @@
                 </el-card>
               </section>
             </div>
-          </el-card>
+          </div>
         </el-col>
 
         <el-col :span="8">
@@ -145,22 +145,15 @@ function downloadMd() {
 </script>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
+.growth-workspace {
+  border-top: 2px solid var(--color-ink);
+  border-bottom: 1px solid var(--color-border);
+  padding: 30px 0 12px;
 }
 
 .growth-content {
   line-height: 1.8;
-  color: #303133;
+  color: var(--color-ink);
 }
 
 .growth-section {
@@ -172,11 +165,11 @@ function downloadMd() {
   font-weight: 600;
   margin-bottom: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .growth-section p {
-  color: #606266;
+  color: var(--color-body);
 }
 
 .exercise-card {
@@ -199,7 +192,7 @@ function downloadMd() {
 
 .quick-list {
   padding-left: 18px;
-  color: #606266;
+  color: var(--color-body);
   line-height: 2;
 }
 

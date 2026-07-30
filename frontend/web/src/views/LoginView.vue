@@ -1,11 +1,10 @@
 <template>
-  <div class="auth-page">
-    <div class="auth-card">
-      <div class="auth-header">
-        <el-icon :size="48" color="#409EFF"><Monitor /></el-icon>
-        <h1 class="auth-title">欢迎使用 面试教练</h1>
-        <p class="auth-subtitle">AI 驱动的模拟面试平台</p>
-      </div>
+  <AuthShell>
+      <header class="auth-header">
+        <p class="auth-kicker">WELCOME BACK</p>
+        <h2 class="auth-title">登录职衡</h2>
+        <p class="auth-subtitle">继续管理简历、岗位与面试进度。</p>
+      </header>
 
       <el-form
         ref="formRef"
@@ -54,19 +53,17 @@
         <el-button link type="primary" @click="$router.push('/register')">立即注册</el-button>
       </div>
 
-      <div class="auth-hint">
-        测试账号：demo / Demo1234
-      </div>
-    </div>
-  </div>
+      <div class="auth-hint"><span>测试账号</span><code>demo / Demo1234</code></div>
+  </AuthShell>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Monitor } from '@element-plus/icons-vue'
+import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import AuthShell from '@/components/AuthShell.vue'
 import type { FormInstance, FormRules } from 'element-plus'
 
 const router = useRouter()
@@ -94,7 +91,7 @@ async function handleLogin() {
     try {
       await userStore.loginByPassword(form.username, form.password)
       ElMessage.success('登录成功')
-      router.push('/')
+      router.push('/resume')
     } catch (error) {
       ElMessage.error((error as Error).message || '登录失败')
     }
@@ -103,38 +100,30 @@ async function handleLogin() {
 </script>
 
 <style scoped>
-.auth-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #e3f2fd 0%, #f5f7fa 100%);
-}
-
-.auth-card {
-  width: 420px;
-  padding: 40px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
 .auth-header {
-  text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 34px;
+}
+
+.auth-kicker {
+  margin: 0 0 14px;
+  color: var(--color-brand-600);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .auth-title {
-  margin-top: 16px;
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 34px;
+  font-weight: 720;
+  line-height: 1.2;
 }
 
 .auth-subtitle {
   margin-top: 8px;
-  font-size: 14px;
-  color: #909399;
+  color: var(--color-muted);
+  font-size: 15px;
 }
 
 .auth-button {
@@ -143,15 +132,24 @@ async function handleLogin() {
 
 .auth-footer {
   margin-top: 24px;
-  text-align: center;
-  color: #606266;
+  color: var(--color-body);
   font-size: 14px;
 }
 
 .auth-hint {
-  margin-top: 12px;
-  text-align: center;
-  color: #909399;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 18px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.auth-hint code {
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 </style>

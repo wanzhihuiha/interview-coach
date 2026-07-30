@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="欢迎使用 Interview Coach"
+    title="欢迎使用职衡 RoleFit AI"
     width="600px"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
@@ -89,25 +89,26 @@ function handleDecline() {
 }
 
 .consent-intro {
-  color: #606266;
+  color: var(--color-body);
   margin-bottom: 16px;
   line-height: 1.6;
 }
 
 .consent-section {
-  background-color: #f5f7fa;
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background-color: var(--color-surface-subtle);
   padding: 16px;
   margin-bottom: 16px;
 }
 
 .consent-section h4 {
   margin-bottom: 8px;
-  color: #303133;
+  color: var(--color-ink);
 }
 
 .consent-section p {
-  color: #606266;
+  color: var(--color-body);
   line-height: 1.6;
   font-size: 14px;
 }

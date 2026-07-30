@@ -2,7 +2,11 @@
   <AppLayout>
     <div class="page-container">
       <div class="section-header">
-        <h2 class="page-title">目标岗位</h2>
+        <div class="page-heading-copy">
+          <span class="page-eyebrow">POSITION ALIGNMENT</span>
+          <h1 class="page-title">目标岗位</h1>
+          <p class="page-subtitle">沉淀岗位要求与考察重点，让每次匹配判断和面试提问都有明确依据。</p>
+        </div>
         <el-button v-if="!isPublicTab" type="primary" :icon="Plus" @click="openCreateDialog">新增岗位</el-button>
       </div>
 
@@ -89,7 +93,13 @@
       </el-dialog>
 
       <!-- 岗位画像弹窗 -->
-      <el-dialog v-model="showProfileDialog" title="岗位画像" width="700px" class="position-profile-dialog">
+      <el-dialog
+        v-model="showProfileDialog"
+        title="岗位画像"
+        width="700px"
+        class="position-profile-dialog"
+        @closed="resetProfileDialog"
+      >
         <div v-if="profileLoading" class="profile-loading">画像解析中，请稍候...</div>
         <div v-else-if="currentProfile" class="profile-content">
           <h4>基本信息</h4>
@@ -130,6 +140,22 @@
             @click="confirmFromDialog">确认画像</el-button>
         </template>
       </el-dialog>
+
+      <ActionConfirmDialog
+        v-model="positionActionVisible"
+        :title="positionActionContent.title"
+        :description="positionActionContent.description"
+        subject-label="目标岗位"
+        :subject="pendingPositionAction?.positionName || '当前岗位'"
+        :confirm-text="positionActionContent.confirmText"
+        :cancel-text="positionActionContent.cancelText"
+        :loading-text="positionActionContent.loadingText"
+        :tone="pendingPositionAction?.type === 'delete' ? 'danger' : 'primary'"
+        :impact="positionActionContent.impact"
+        :loading="positionActionLoading"
+        @confirm="executePositionAction"
+        @closed="resetPositionAction"
+      />
     </div>
   </AppLayout>
 </template>
@@ -137,8 +163,9 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import ActionConfirmDialog from '@/components/ActionConfirmDialog.vue'
 import AppLayout from '@/components/AppLayout.vue'
 import {
   getPositionList,
@@ -152,6 +179,48 @@ import {
 } from '@/api/position'
 import type { Position, PositionProfileData, ProbingDirection } from '@/types'
 import type { FormInstance, FormRules, UploadFile, UploadInstance } from 'element-plus'
+
+type PositionActionType = 'reparse' | 'delete'
+
+interface PendingPositionAction {
+  type: PositionActionType
+  positionId: number
+  positionName: string
+}
+
+interface PositionActionContent {
+  title: string
+  description: string
+  confirmText: string
+  cancelText: string
+  loadingText: string
+  impact: Array<{ label: string; value: string }>
+}
+
+const POSITION_ACTION_CONTENT: Record<PositionActionType, PositionActionContent> = {
+  reparse: {
+    title: '重新解析这份岗位 JD？',
+    description: '职衡会重新分析岗位要求与考察方向，解析期间保留现有 JD 原文。',
+    confirmText: '开始解析',
+    cancelText: '暂不解析',
+    loadingText: '正在提交',
+    impact: [
+      { label: 'JD 原文', value: '保持不变' },
+      { label: '岗位画像', value: '解析完成后更新' }
+    ]
+  },
+  delete: {
+    title: '删除这个目标岗位？',
+    description: '岗位档案及其画像会从当前账号中移除，之后不能继续用于匹配与面试配置。',
+    confirmText: '删除岗位',
+    cancelText: '保留岗位',
+    loadingText: '正在删除',
+    impact: [
+      { label: '档案内容', value: '岗位与画像一并移除' },
+      { label: '恢复方式', value: '删除后无法在页面内撤销' }
+    ]
+  }
+}
 
 const router = useRouter()
 const positions = ref<Position[]>([])
@@ -168,6 +237,10 @@ const uploadRef = ref<UploadInstance>()
 const currentPosition = ref<Position | null>(null)
 const currentProfile = ref<PositionProfileData | null>(null)
 const currentFile = ref<File | null>(null)
+const positionActionVisible = ref(false)
+const positionActionLoading = ref(false)
+const pendingPositionAction = ref<PendingPositionAction | null>(null)
+let profileRequestSequence = 0
 
 const form = ref({
   positionName: '',
@@ -198,6 +271,10 @@ const selectedPosition = computed(() => {
 const sortedProbingDirections = computed<ProbingDirection[]>(() => {
   const dirs = currentProfile.value?.probingDirections || []
   return [...dirs].sort((a, b) => a.priority - b.priority)
+})
+
+const positionActionContent = computed(() => {
+  return POSITION_ACTION_CONTENT[pendingPositionAction.value?.type || 'reparse']
 })
 
 onMounted(async () => {
@@ -284,15 +361,31 @@ async function pollParseStatus(positionId: number) {
 }
 
 async function openDetail(row: Position) {
+  const requestSequence = ++profileRequestSequence
   currentPosition.value = row
+  currentProfile.value = null
   showProfileDialog.value = true
   profileLoading.value = true
   try {
     const res = await getPositionProfile(row.positionId)
+    if (requestSequence !== profileRequestSequence || !showProfileDialog.value) return
     currentProfile.value = res.profile || null
+  } catch (error) {
+    if (requestSequence !== profileRequestSequence || !showProfileDialog.value) return
+    ElMessage.error((error as Error).message || '获取岗位画像失败')
+    showProfileDialog.value = false
   } finally {
-    profileLoading.value = false
+    if (requestSequence === profileRequestSequence) {
+      profileLoading.value = false
+    }
   }
+}
+
+function resetProfileDialog() {
+  profileRequestSequence++
+  currentPosition.value = null
+  currentProfile.value = null
+  profileLoading.value = false
 }
 
 async function confirm(row: Position) {
@@ -325,34 +418,62 @@ async function confirmFromDialog() {
   }
 }
 
-async function reparse(positionId: number) {
+function reparse(positionId: number) {
+  openPositionAction('reparse', positionId)
+}
+
+function remove(positionId: number) {
+  openPositionAction('delete', positionId)
+}
+
+function openPositionAction(type: PositionActionType, positionId: number) {
+  if (positionActionLoading.value) return
+  const position = positions.value.find(item => item.positionId === positionId)
+  if (!position) {
+    ElMessage.error('未找到这个岗位，请刷新后重试')
+    return
+  }
+  pendingPositionAction.value = {
+    type,
+    positionId,
+    positionName: position.positionName
+  }
+  positionActionVisible.value = true
+}
+
+async function executePositionAction() {
+  const pending = pendingPositionAction.value
+  if (!pending || positionActionLoading.value) return
+
+  positionActionLoading.value = true
   try {
-    await ElMessageBox.confirm('确定要重新解析该岗位的 JD 吗？', '提示', { type: 'warning' })
-    await reparsePosition(positionId)
-    ElMessage.success('已重新解析')
-    await loadPositions()
-    pollParseStatus(positionId)
-  } catch (error) {
-    if ((error as Error).message !== 'cancel') {
-      ElMessage.error((error as Error).message || '重新解析失败')
+    if (pending.type === 'reparse') {
+      await reparsePosition(pending.positionId)
+      ElMessage.success('重新解析已提交')
+      await loadPositions().catch(error => {
+        ElMessage.error((error as Error).message || '岗位列表刷新失败，请稍后重试')
+      })
+      void pollParseStatus(pending.positionId)
+    } else {
+      await deletePosition(pending.positionId)
+      ElMessage.success('删除成功')
+      positions.value = positions.value.filter(position => position.positionId !== pending.positionId)
+      if (selectedId.value === pending.positionId) {
+        selectedId.value = positions.value.length > 0 ? positions.value[0].positionId : null
+      }
     }
+    positionActionVisible.value = false
+  } catch (error) {
+    const fallback = pending.type === 'reparse' ? '重新解析失败' : '删除失败'
+    ElMessage.error((error as Error).message || fallback)
+  } finally {
+    positionActionLoading.value = false
   }
 }
 
-async function remove(positionId: number) {
-  try {
-    await ElMessageBox.confirm('确定要删除该岗位吗？', '提示', { type: 'warning' })
-    await deletePosition(positionId)
-    ElMessage.success('删除成功')
-    positions.value = positions.value.filter(p => p.positionId !== positionId)
-    if (selectedId.value === positionId) {
-      selectedId.value = positions.value.length > 0 ? positions.value[0].positionId : null
-    }
-  } catch (error) {
-    if ((error as Error).message !== 'cancel') {
-      ElMessage.error((error as Error).message || '删除失败')
-    }
-  }
+function resetPositionAction() {
+  if (positionActionVisible.value || positionActionLoading.value) return
+  pendingPositionAction.value = null
 }
 
 function goToInterviewConfig() {
@@ -372,19 +493,6 @@ function statusTagType(status: string) {
 </script>
 
 <style scoped>
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-}
-
 .detail-panel {
   margin-top: 24px;
 }
@@ -401,7 +509,7 @@ function statusTagType(status: string) {
 }
 
 .jd-desc {
-  color: #606266;
+  color: var(--color-body);
   line-height: 1.8;
   margin-top: 8px;
   white-space: pre-wrap;
@@ -410,13 +518,13 @@ function statusTagType(status: string) {
 .profile-loading {
   text-align: center;
   padding: 40px 0;
-  color: #909399;
+  color: var(--color-muted);
 }
 
 .profile-content h4 {
   margin: 16px 0 8px;
-  color: #303133;
-  border-left: 4px solid #409EFF;
+  color: var(--color-ink);
+  border-left: 4px solid var(--color-brand-500);
   padding-left: 8px;
 }
 
@@ -428,13 +536,14 @@ function statusTagType(status: string) {
 .probing-item {
   margin-bottom: 12px;
   padding: 12px;
-  background: #f5f7fa;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-subtle);
 }
 
 .probing-item ul {
   margin: 4px 0 0 16px;
-  color: #606266;
+  color: var(--color-body);
 }
 </style>
 

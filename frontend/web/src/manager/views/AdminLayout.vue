@@ -1,10 +1,13 @@
 <template>
   <el-container class="admin-layout">
-    <el-aside width="220px" class="admin-aside">
-      <div class="admin-logo" @click="goHome">
-        <el-icon :size="24" color="#409EFF"><Setting /></el-icon>
-        <span class="admin-logo-text">后台管理</span>
-      </div>
+    <el-aside width="240px" class="admin-aside">
+      <button class="admin-logo" type="button" aria-label="返回职衡首页" @click="goHome">
+        <span class="admin-logo-mark" aria-hidden="true"></span>
+        <span class="admin-logo-copy">
+          <strong>职衡</strong>
+          <small>ROLEFIT ADMIN</small>
+        </span>
+      </button>
       <el-menu
         :default-active="activeMenu"
         class="admin-menu"
@@ -36,9 +39,12 @@
         </el-menu-item>
       </el-menu>
     </el-aside>
-    <el-container direction="vertical">
+    <el-container class="admin-content" direction="vertical">
       <el-header class="admin-header">
-        <div class="admin-header-left">{{ pageTitle }}</div>
+        <div class="admin-header-left">
+          <small>ROLEFIT CONTROL CENTER</small>
+          <strong>职衡管理工作台</strong>
+        </div>
         <div class="admin-header-right">
           <el-button text @click="goHome">返回前台</el-button>
           <el-dropdown @command="handleCommand">
@@ -67,7 +73,6 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Setting,
   DataLine,
   OfficeBuilding,
   Document,
@@ -83,18 +88,6 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const activeMenu = computed(() => route.path)
-
-const pageTitle = computed(() => {
-  const titles: Record<string, string> = {
-    '/admin': '管理概览',
-    '/admin/positions': '岗位审核',
-    '/admin/questions': '题目审核',
-    '/admin/question-bank': '题库管理',
-    '/admin/users': '用户管理',
-    '/admin/audit-logs': '审计日志'
-  }
-  return titles[route.path] || '后台管理'
-})
 
 function goHome() {
   router.push('/')
@@ -115,69 +108,113 @@ function handleCommand(command: string) {
 }
 
 .admin-aside {
-  background-color: #304156;
-  color: #fff;
+  color: var(--color-on-console);
+  background: var(--color-console);
+}
+
+.admin-content {
+  min-width: 0;
 }
 
 .admin-logo {
   display: flex;
+  width: 100%;
   align-items: center;
-  gap: 10px;
-  height: 60px;
-  padding: 0 20px;
+  gap: 14px;
+  height: 72px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0 24px;
+  color: inherit;
+  background: transparent;
   cursor: pointer;
-  border-bottom: 1px solid #1f2d3d;
+  text-align: left;
 }
 
-.admin-logo-text {
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
+.admin-logo-mark {
+  width: 4px;
+  height: 32px;
+  background: var(--color-brand-500);
+}
+
+.admin-logo-copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-logo-copy strong {
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.admin-logo-copy small {
+  margin-top: 7px;
+  color: #82817c;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 650;
 }
 
 .admin-menu {
   border-right: none;
   background-color: transparent;
-  --el-menu-text-color: #ffffff;
+  --el-menu-text-color: #aaa9a3;
   --el-menu-hover-text-color: #ffffff;
-  --el-menu-active-color: #409eff;
+  --el-menu-active-color: #ffffff;
   --el-menu-bg-color: transparent;
-  --el-menu-hover-bg-color: #263445;
+  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.05);
 }
 
 .admin-menu :deep(.el-menu-item) {
-  color: #ffffff;
+  height: 52px;
+  border-left: 3px solid transparent;
+  color: #aaa9a3;
 }
 
 .admin-menu :deep(.el-menu-item:hover) {
-  background-color: #263445;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .admin-menu :deep(.el-menu-item.is-active) {
-  color: #409eff;
-  background-color: #263445;
-}
-
-.admin-menu :deep(.el-sub-menu__title) {
+  border-left-color: var(--color-brand-500);
   color: #ffffff;
-}
-
-.admin-menu :deep(.el-sub-menu__title:hover) {
-  background-color: #263445;
+  background: rgba(233, 76, 58, 0.12);
 }
 
 .admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 80;
   display: flex;
+  height: 72px;
   align-items: center;
   justify-content: space-between;
-  background-color: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 32px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(160%) blur(16px);
 }
 
 .admin-header-left {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-header-left small {
+  color: var(--color-brand-600);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.admin-header-left strong {
+  margin-top: 5px;
+  color: var(--color-ink);
+  font-size: 17px;
+  font-weight: 680;
 }
 
 .admin-header-right {
@@ -194,6 +231,16 @@ function handleCommand(command: string) {
 }
 
 .admin-main {
-  background-color: #f5f7fa;
+  min-width: 0;
+  padding: 0;
+  background: var(--color-canvas);
+}
+
+.admin-main :deep(.audit-view),
+.admin-main :deep(.admin-dashboard) {
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
 }
 </style>

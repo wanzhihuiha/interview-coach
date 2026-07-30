@@ -1,0 +1,182 @@
+.page-header,
+.section-header,
+.workspace-heading {
+  display: flex;
+  min-height: 88px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 28px;
+  padding-bottom: 22px;
+}
+
+.page-heading-copy {
+  min-width: 0;
+}
+
+.page-eyebrow {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--color-brand-600);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.page-title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 30px;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  max-width: 680px;
+  margin: 10px 0 0;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.page-container > .el-card,
+.page-container > .el-row > .el-col > .el-card {
+  overflow: hidden;
+}
+
+.page-container .el-card__header {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  border-bottom-color: var(--color-border);
+}
+
+.page-container .el-table {
+  border-top: 1px solid var(--color-border);
+}
+
+.page-container .el-empty {
+  min-height: 240px;
+}
+
+.card-title,
+.detail-title {
+  color: var(--color-ink);
+  font-weight: 650;
+}
+
+.audit-view,
+.admin-dashboard {
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+}
+
+.audit-view > .el-card,
+.admin-dashboard > .el-card {
+  border-top: 2px solid var(--color-ink);
+}
+
+.audit-header {
+  min-height: 40px;
+  color: var(--color-ink);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.admin-data-panel {
+  overflow: hidden;
+  border-top: 2px solid var(--color-ink);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.admin-data-heading,
+.admin-toolbar {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px 18px;
+}
+
+.admin-data-heading > div {
+  min-width: 0;
+}
+
+.admin-data-heading strong {
+  display: block;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.admin-data-heading p {
+  margin: 3px 0 0;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.admin-data-count {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.admin-toolbar {
+  justify-content: flex-start;
+  background: var(--color-surface-subtle);
+}
+
+.admin-toolbar .el-form {
+  width: 100%;
+}
+
+.admin-toolbar .el-form-item {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.admin-data-panel .el-table {
+  border-top: 0;
+}
+
+.admin-pagination {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border);
+  padding: 12px 18px;
+}
+
+.admin-status-note {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-body);
+  font-size: 12px;
+}
+
+.admin-status-note::before {
+  width: 7px;
+  height: 7px;
+  content: '';
+  background: var(--color-success);
+}
+
+@media (min-width: 2560px) {
+  .audit-view,
+  .admin-dashboard {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+}

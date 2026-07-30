@@ -1,0 +1,145 @@
+:root {
+  --el-color-primary: var(--color-brand-600);
+  --el-color-primary-light-3: #d97068;
+  --el-color-primary-light-5: #e49d97;
+  --el-color-primary-light-7: #efc5c1;
+  --el-color-primary-light-8: #f5d8d5;
+  --el-color-primary-light-9: var(--color-brand-50);
+  --el-color-primary-dark-2: var(--color-brand-700);
+  --el-color-success: var(--color-success);
+  --el-color-warning: var(--color-warning);
+  --el-color-danger: var(--color-danger);
+  --el-text-color-primary: var(--color-ink);
+  --el-text-color-regular: var(--color-body);
+  --el-text-color-secondary: var(--color-muted);
+  --el-text-color-placeholder: #91959c;
+  --el-border-color: var(--color-border);
+  --el-border-color-light: #e4e6ea;
+  --el-border-color-lighter: #eceef1;
+  --el-border-color-extra-light: #f2f3f5;
+  --el-border-color-dark: var(--color-border-strong);
+  --el-fill-color: #f0f1f3;
+  --el-fill-color-light: #f6f6f8;
+  --el-fill-color-lighter: #fafafb;
+  --el-fill-color-extra-light: #fcfcfd;
+  --el-fill-color-blank: var(--color-surface);
+  --el-bg-color: var(--color-surface);
+  --el-bg-color-page: var(--color-canvas);
+  --el-bg-color-overlay: var(--color-surface);
+  --el-font-family: var(--font-sans);
+  --el-font-size-base: 15px;
+  --el-border-radius-base: var(--radius-control);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: var(--radius-pill);
+  --el-box-shadow-light: var(--shadow-overlay);
+  --el-box-shadow-lighter: 0 8px 24px rgba(29, 29, 31, 0.1);
+  --el-component-size-large: 44px;
+  --el-component-size: 40px;
+}
+
+.el-button {
+  font-weight: 600;
+  letter-spacing: 0;
+  transition: color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.el-button:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
+.el-card {
+  border-color: var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.el-card__header {
+  border-bottom-color: var(--color-border);
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+  transition: box-shadow var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--color-brand-600) inset,
+    0 0 0 3px var(--color-focus-ring);
+}
+
+.el-dropdown-menu,
+.el-popper,
+.el-dialog {
+  border-radius: var(--radius-panel);
+}
+
+.el-dialog {
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-overlay);
+}
+
+.el-table {
+  --el-table-border-color: var(--color-border);
+  --el-table-header-bg-color: var(--color-surface-subtle);
+  --el-table-row-hover-bg-color: var(--color-brand-50);
+  --el-table-current-row-bg-color: var(--color-brand-50);
+  --el-table-tr-bg-color: var(--color-surface);
+  color: var(--color-body);
+}
+
+.el-table th.el-table__cell {
+  height: 48px;
+  color: var(--color-ink);
+  font-weight: 650;
+}
+
+.el-table td.el-table__cell {
+  height: 52px;
+}
+
+.el-tabs__active-bar {
+  background: var(--color-brand-600);
+}
+
+.el-tabs__item.is-active,
+.el-tabs__item:hover {
+  color: var(--color-brand-600);
+}
+
+.el-pagination.is-background .el-pager li.is-active {
+  background: var(--color-brand-600);
+}
+
+.el-progress-bar__inner {
+  background: var(--color-brand-600);
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--color-brand-600);
+  --el-button-border-color: var(--color-brand-600);
+  --el-button-hover-bg-color: var(--color-brand-500);
+  --el-button-hover-border-color: var(--color-brand-500);
+  --el-button-active-bg-color: var(--color-brand-700);
+  --el-button-active-border-color: var(--color-brand-700);
+}
+
+.el-menu-item,
+.el-sub-menu__title {
+  letter-spacing: 0;
+}

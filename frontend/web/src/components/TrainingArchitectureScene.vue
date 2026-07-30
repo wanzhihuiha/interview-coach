@@ -32,9 +32,9 @@ interface EnergyPacket {
 }
 
 const stages: TrainingStage[] = [
-  { label: '简历准备', status: '已就绪', statusColor: '#7f89ff', light: false },
-  { label: '岗位分析', status: '已匹配', statusColor: '#7f89ff', light: false },
-  { label: '模拟问答', status: '面试中', statusColor: '#a78bfa', light: false },
+  { label: '简历准备', status: '已就绪', statusColor: '#e94c3a', light: false },
+  { label: '岗位分析', status: '已匹配', statusColor: '#c93b30', light: false },
+  { label: '模拟问答', status: '面试中', statusColor: '#ef8e84', light: false },
   { label: '逐题复盘', status: '待复盘', statusColor: '#e5ad3d', light: true },
   { label: '改进建议', status: '已完成', statusColor: '#5fd779', light: true }
 ]
@@ -168,30 +168,30 @@ function createContextTexture() {
   if (!context) throw new Error('Canvas 2D context is unavailable')
 
   const horizontal = context.createLinearGradient(0, 0, canvas.width, 0)
-  horizontal.addColorStop(0, 'rgba(42, 49, 128, 0.04)')
-  horizontal.addColorStop(0.18, 'rgba(74, 84, 205, 0.34)')
-  horizontal.addColorStop(0.5, 'rgba(111, 119, 255, 0.58)')
-  horizontal.addColorStop(0.82, 'rgba(74, 84, 205, 0.32)')
-  horizontal.addColorStop(1, 'rgba(42, 49, 128, 0.03)')
+  horizontal.addColorStop(0, 'rgba(112, 32, 27, 0.04)')
+  horizontal.addColorStop(0.18, 'rgba(169, 46, 38, 0.34)')
+  horizontal.addColorStop(0.5, 'rgba(233, 76, 58, 0.58)')
+  horizontal.addColorStop(0.82, 'rgba(169, 46, 38, 0.32)')
+  horizontal.addColorStop(1, 'rgba(112, 32, 27, 0.03)')
   context.fillStyle = horizontal
   context.fillRect(0, 0, canvas.width, canvas.height)
 
   const vertical = context.createLinearGradient(0, 0, 0, canvas.height)
-  vertical.addColorStop(0, 'rgba(149, 157, 255, 0.62)')
-  vertical.addColorStop(0.42, 'rgba(89, 100, 239, 0.26)')
-  vertical.addColorStop(1, 'rgba(25, 31, 89, 0)')
+  vertical.addColorStop(0, 'rgba(245, 157, 151, 0.62)')
+  vertical.addColorStop(0.42, 'rgba(201, 59, 48, 0.26)')
+  vertical.addColorStop(1, 'rgba(64, 20, 17, 0)')
   context.fillStyle = vertical
   context.fillRect(0, 0, canvas.width, canvas.height)
 
   for (let index = 0; index < 9; index += 1) {
     const x = 46 + index * 52
-    context.fillStyle = `rgba(154, 162, 255, ${index % 2 === 0 ? 0.42 : 0.2})`
+    context.fillStyle = `rgba(239, 142, 132, ${index % 2 === 0 ? 0.42 : 0.2})`
     context.fillRect(x, 0, index % 3 === 0 ? 5 : 2, canvas.height)
   }
 
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.fillStyle = 'rgba(238, 239, 255, 0.92)'
+  context.fillStyle = 'rgba(255, 240, 237, 0.92)'
   context.font = '700 58px Consolas, "SFMono-Regular", monospace'
   context.fillText('INTERVIEW', canvas.width / 2, 224)
   context.fillText('CONTEXT', canvas.width / 2, 292)
@@ -211,14 +211,14 @@ function createFlowTexture() {
 
   context.clearRect(0, 0, canvas.width, canvas.height)
   const glow = context.createLinearGradient(0, 0, 0, canvas.height)
-  glow.addColorStop(0, 'rgba(111, 125, 255, 0)')
-  glow.addColorStop(0.32, 'rgba(111, 125, 255, 0.08)')
-  glow.addColorStop(0.5, 'rgba(214, 218, 255, 0.92)')
-  glow.addColorStop(0.68, 'rgba(111, 125, 255, 0.12)')
-  glow.addColorStop(1, 'rgba(111, 125, 255, 0)')
+  glow.addColorStop(0, 'rgba(233, 76, 58, 0)')
+  glow.addColorStop(0.32, 'rgba(233, 76, 58, 0.08)')
+  glow.addColorStop(0.5, 'rgba(255, 221, 216, 0.92)')
+  glow.addColorStop(0.68, 'rgba(233, 76, 58, 0.12)')
+  glow.addColorStop(1, 'rgba(233, 76, 58, 0)')
   context.fillStyle = glow
   context.fillRect(0, 0, canvas.width, canvas.height)
-  context.fillStyle = 'rgba(184, 190, 255, 0.72)'
+  context.fillStyle = 'rgba(239, 142, 132, 0.72)'
   context.fillRect(61, 0, 6, canvas.height)
 
   const texture = trackTexture(new THREE.CanvasTexture(canvas))
@@ -243,9 +243,9 @@ function createRadialGlowTexture(color: 'blue' | 'green') {
     gradient.addColorStop(0.2, 'rgba(94, 232, 122, 0.72)')
     gradient.addColorStop(0.55, 'rgba(71, 204, 99, 0.2)')
   } else {
-    gradient.addColorStop(0, 'rgba(223, 226, 255, 1)')
-    gradient.addColorStop(0.16, 'rgba(137, 149, 255, 0.84)')
-    gradient.addColorStop(0.55, 'rgba(92, 107, 255, 0.22)')
+    gradient.addColorStop(0, 'rgba(255, 237, 234, 1)')
+    gradient.addColorStop(0.16, 'rgba(239, 142, 132, 0.84)')
+    gradient.addColorStop(0.55, 'rgba(201, 59, 48, 0.22)')
   }
   gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
   context.fillStyle = gradient
@@ -298,7 +298,7 @@ function createArchitecture() {
   const contextTexture = createContextTexture()
   contextMaterial = trackMaterial(new THREE.MeshBasicMaterial({
     map: contextTexture,
-    color: 0xa9afff,
+    color: 0xf0a39b,
     transparent: true,
     opacity: 0.48,
     blending: THREE.AdditiveBlending,
@@ -315,7 +315,7 @@ function createArchitecture() {
   flowTexture = createFlowTexture()
   const flowMaterial = trackMaterial(new THREE.MeshBasicMaterial({
     map: flowTexture,
-    color: 0xb9beff,
+    color: 0xf4bbb5,
     transparent: true,
     opacity: 0.7,
     blending: THREE.AdditiveBlending,
@@ -358,7 +358,7 @@ function createArchitecture() {
     if (index < stages.length - 1) {
       const glowMaterial = trackMaterial(new THREE.SpriteMaterial({
         map: blueGlowTexture,
-        color: index === 2 ? 0xa084ff : 0x7584ff,
+        color: index === 2 ? 0xef8e84 : 0xe94c3a,
         transparent: true,
         opacity: 0.26,
         blending: THREE.AdditiveBlending,
@@ -376,7 +376,7 @@ function createArchitecture() {
   for (let index = 0; index < 3; index += 1) {
     const material = trackMaterial(new THREE.SpriteMaterial({
       map: blueGlowTexture,
-      color: index === 1 ? 0xb19bff : 0x7f8dff,
+      color: index === 1 ? 0xf0a39b : 0xc93b30,
       transparent: true,
       opacity: 0.75,
       blending: THREE.AdditiveBlending,
@@ -481,7 +481,7 @@ function createArchitecture() {
 
   const groundGlow = new THREE.Sprite(trackMaterial(new THREE.SpriteMaterial({
     map: blueGlowTexture,
-    color: 0x5969ff,
+    color: 0xc93b30,
     transparent: true,
     opacity: 0.16,
     blending: THREE.AdditiveBlending,
@@ -495,7 +495,7 @@ function createArchitecture() {
 
 function createLights() {
   if (!scene) return
-  scene.add(new THREE.HemisphereLight(0xb8c1ff, 0x090a0d, 1.25))
+  scene.add(new THREE.HemisphereLight(0xf7dfda, 0x090a0d, 1.25))
 
   const keyLight = new THREE.DirectionalLight(0xfff2d9, 3.9)
   keyLight.position.set(7, 8, 10)
@@ -510,15 +510,15 @@ function createLights() {
   keyLight.shadow.bias = -0.0008
   scene.add(keyLight)
 
-  const rimLight = new THREE.PointLight(0xd7d9ff, 85, 28, 2)
+  const rimLight = new THREE.PointLight(0xffdad4, 85, 28, 2)
   rimLight.position.set(7.5, 2.4, -4.5)
   scene.add(rimLight)
 
-  const violetLight = new THREE.PointLight(0x6573ff, 72, 18, 2)
+  const violetLight = new THREE.PointLight(0xe94c3a, 72, 18, 2)
   violetLight.position.set(-2.4, 2.8, 2.4)
   scene.add(violetLight)
 
-  bluePulseLight = new THREE.PointLight(0x7b89ff, 48, 10, 2)
+  bluePulseLight = new THREE.PointLight(0xc93b30, 48, 10, 2)
   bluePulseLight.position.set(0, 1.5, 0.6)
   scene.add(bluePulseLight)
 
@@ -767,15 +767,7 @@ onBeforeUnmount(disposeScene)
 }
 
 .training-architecture-scene::after {
-  position: absolute;
-  right: 4%;
-  bottom: 1%;
-  left: 3%;
-  height: 20%;
-  content: '';
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, rgba(76, 88, 218, 0.2), rgba(8, 9, 11, 0) 70%);
-  filter: blur(20px);
+  display: none;
 }
 
 .training-architecture-scene :deep(.training-architecture-canvas) {
@@ -803,8 +795,8 @@ onBeforeUnmount(disposeScene)
 .scene-loader span {
   width: 4px;
   height: 32px;
-  background: #7782ff;
-  box-shadow: 0 0 16px rgba(119, 130, 255, 0.72);
+  background: var(--color-brand-500);
+  box-shadow: 0 0 16px rgba(233, 76, 58, 0.46);
   animation: scene-loading 900ms ease-in-out infinite alternate;
 }
 
@@ -828,11 +820,11 @@ onBeforeUnmount(disposeScene)
   height: 56px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 6px;
-  background: linear-gradient(110deg, #292c32, #0e1014 68%, #44474d);
+  background: #242421;
 }
 
 .fallback-stack span:nth-last-child(-n + 2) {
-  background: linear-gradient(110deg, #e2e0d8, #919399 68%, #f4f1e9);
+  background: #deddd8;
 }
 
 @keyframes scene-loading {

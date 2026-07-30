@@ -1,10 +1,10 @@
 <template>
-  <div class="auth-page">
-    <div class="auth-card">
-      <div class="auth-header">
-        <h1 class="auth-title">创建账号</h1>
-        <p class="auth-subtitle">开启你的 AI 面试训练</p>
-      </div>
+  <AuthShell>
+      <header class="auth-header">
+        <p class="auth-kicker">CREATE ACCOUNT</p>
+        <h2 class="auth-title">创建职衡账号</h2>
+        <p class="auth-subtitle">建立你的简历档案与面试记录。</p>
+      </header>
 
       <el-form
         ref="formRef"
@@ -68,8 +68,7 @@
         <span>已有账号？</span>
         <el-button link type="primary" @click="$router.push('/login')">立即登录</el-button>
       </div>
-    </div>
-  </div>
+  </AuthShell>
 </template>
 
 <script setup lang="ts">
@@ -79,6 +78,7 @@ import { ElMessage } from 'element-plus'
 import { User, Phone, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { sendSmsCode } from '@/api'
+import AuthShell from '@/components/AuthShell.vue'
 import type { FormInstance, FormRules } from 'element-plus'
 
 const router = useRouter()
@@ -149,7 +149,7 @@ async function handleRegister() {
         smsCode: form.smsCode
       })
       ElMessage.success('注册成功')
-      router.push('/')
+      router.push('/resume')
     } catch (error) {
       ElMessage.error((error as Error).message || '注册失败')
     }
@@ -158,37 +158,30 @@ async function handleRegister() {
 </script>
 
 <style scoped>
-.auth-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #e3f2fd 0%, #f5f7fa 100%);
-}
-
-.auth-card {
-  width: 460px;
-  padding: 40px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
 .auth-header {
-  text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 30px;
+}
+
+.auth-kicker {
+  margin: 0 0 14px;
+  color: var(--color-brand-600);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .auth-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 34px;
+  font-weight: 720;
+  line-height: 1.2;
 }
 
 .auth-subtitle {
   margin-top: 8px;
-  font-size: 14px;
-  color: #909399;
+  color: var(--color-muted);
+  font-size: 15px;
 }
 
 .auth-button {
@@ -198,8 +191,7 @@ async function handleRegister() {
 
 .auth-footer {
   margin-top: 24px;
-  text-align: center;
-  color: #606266;
+  color: var(--color-body);
   font-size: 14px;
 }
 </style>

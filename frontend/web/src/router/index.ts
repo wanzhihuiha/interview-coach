@@ -20,6 +20,13 @@ const router = createRouter({
     {
       path: '/',
       name: 'Home',
+      component: () => import('@/views/HomeV2View.vue'),
+      alias: '/home-v2',
+      meta: { public: true }
+    },
+    {
+      path: '/home-legacy',
+      name: 'HomeLegacy',
       component: () => import('@/views/HomeView.vue'),
       meta: { public: true }
     },

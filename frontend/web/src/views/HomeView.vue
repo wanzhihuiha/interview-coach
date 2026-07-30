@@ -6,7 +6,7 @@
           <div class="hero-copy">
             <div class="eyebrow">
               <span class="eyebrow-dot" aria-hidden="true"></span>
-              INTERVIEW COACH · AI 模拟面试
+              ROLEFIT AI · AI 人岗匹配与智能面试
             </div>
 
             <p class="welcome-line">{{ heroWelcome }}</p>
@@ -355,7 +355,7 @@ function formatDateTime(value?: string): string {
   --home-text: #f3f1e9;
   --home-muted: #9b9da5;
   --home-border: rgba(255, 255, 255, 0.12);
-  --home-blue: #6d77ff;
+  --home-blue: var(--color-brand-500);
   --home-green: #65d67b;
   min-height: 100vh;
   overflow: hidden;
@@ -373,16 +373,7 @@ function formatDateTime(value?: string): string {
 }
 
 .hero-section::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  content: '';
-  opacity: 0.18;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: linear-gradient(to right, black, transparent 76%);
+  display: none;
 }
 
 .hero-grid {
@@ -481,7 +472,7 @@ h1 span {
 .primary-action.el-button:focus-visible {
   border-color: #ffffff;
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(109, 119, 255, 0.22);
+  box-shadow: 0 0 0 4px var(--color-focus-ring);
 }
 
 .secondary-action.el-button {
@@ -517,7 +508,7 @@ h1 span {
 }
 
 .hero-capabilities .el-icon {
-  color: #a9adff;
+  color: var(--color-brand-500);
   font-size: 15px;
 }
 
@@ -532,17 +523,7 @@ h1 span {
 }
 
 .system-visual::after {
-  position: absolute;
-  right: -2%;
-  bottom: 4px;
-  left: 8%;
-  z-index: -1;
-  height: 150px;
-  content: '';
-  transform: rotateX(68deg) translateZ(-80px);
-  transform-origin: center bottom;
-  background: radial-gradient(ellipse at center, rgba(78, 86, 171, 0.26), rgba(8, 9, 11, 0) 68%);
-  filter: blur(10px);
+  display: none;
 }
 
 .visual-meta {
@@ -604,7 +585,7 @@ h1 span {
 }
 
 .hero-footer-label {
-  color: #9299ff;
+  color: var(--color-brand-500);
   font-size: 10px;
   font-weight: 700;
 }
@@ -625,7 +606,7 @@ h1 span {
 
 .section-index {
   margin-bottom: 8px;
-  color: #747bff;
+  color: var(--color-brand-500);
   font-size: 11px;
   font-weight: 700;
 }
@@ -665,8 +646,8 @@ h1 span {
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 24px;
-  border-top: 1px solid rgba(109, 119, 255, 0.45);
-  border-bottom: 1px solid rgba(109, 119, 255, 0.24);
+  border-top: 1px solid rgba(233, 76, 58, 0.45);
+  border-bottom: 1px solid rgba(233, 76, 58, 0.24);
   padding: 10px 4px;
   color: #aeb0b8;
   font-size: 13px;
@@ -681,7 +662,7 @@ h1 span {
 
 .guest-access-bar > div > .el-icon {
   flex: 0 0 auto;
-  color: #9299ff;
+  color: var(--color-brand-500);
   font-size: 20px;
 }
 
@@ -692,7 +673,7 @@ h1 span {
 .guest-access-bar :deep(.el-button) {
   min-height: 44px;
   flex: 0 0 auto;
-  color: #aeb4ff;
+  color: var(--color-brand-100);
 }
 
 .console-grid {
@@ -728,7 +709,7 @@ h1 span {
 
 .column-title-wrap > .el-icon {
   flex: 0 0 auto;
-  color: #8e95ff;
+  color: var(--color-brand-500);
   font-size: 24px;
 }
 
@@ -789,7 +770,7 @@ h1 span {
 .data-row:focus-visible,
 .empty-row:focus-visible,
 .column-action:focus-visible {
-  box-shadow: inset 0 0 0 2px #8790ff;
+  box-shadow: inset 0 0 0 2px var(--color-brand-500);
 }
 
 .row-main {
@@ -843,7 +824,7 @@ h1 span {
 }
 
 .score-cell strong {
-  color: #b8bdff;
+  color: var(--color-brand-100);
   font-family: Consolas, monospace;
   font-size: 21px;
 }
@@ -897,7 +878,7 @@ h1 span {
 
 .column-action:hover {
   color: #ffffff;
-  background: rgba(109, 119, 255, 0.08);
+  background: rgba(233, 76, 58, 0.08);
 }
 
 .skeleton-list {

@@ -2,7 +2,11 @@
   <AppLayout>
     <div class="page-container">
       <div class="page-header">
-        <h2 class="page-title">面试报告</h2>
+        <div class="page-heading-copy">
+          <span class="page-eyebrow">PERFORMANCE REPORT</span>
+          <h1 class="page-title">面试报告</h1>
+          <p class="page-subtitle">聚合评分、环节表现与能力证据，明确下一轮准备重点。</p>
+        </div>
         <el-button type="primary" :icon="Download" :disabled="!report" @click="downloadMd">下载报告 MD</el-button>
       </div>
 
@@ -119,9 +123,9 @@ const loading = ref(false)
 const error = ref('')
 const isLoggedIn = ref(!!getToken())
 const scoreColor = [
-  { color: '#F56C6C', percentage: 60 },
-  { color: '#E6A23C', percentage: 75 },
-  { color: '#67C23A', percentage: 90 }
+  { color: '#b42318', percentage: 60 },
+  { color: '#9a5b00', percentage: 75 },
+  { color: '#1e7a46', percentage: 90 }
 ]
 
 onMounted(async () => {
@@ -159,22 +163,9 @@ function downloadMd() {
 </script>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
-}
-
 .score-card {
   margin-bottom: 20px;
+  border-top: 2px solid var(--color-ink);
 }
 
 .score-overview {
@@ -182,7 +173,7 @@ function downloadMd() {
   justify-content: center;
   gap: 60px;
   padding: 20px 0;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: 24px;
 }
 
@@ -193,18 +184,18 @@ function downloadMd() {
 .score-value, .level-value {
   font-size: 48px;
   font-weight: 700;
-  color: #409EFF;
+  color: var(--color-brand-600);
   line-height: 1;
 }
 
 .level-value {
-  color: #67C23A;
+  color: var(--color-success);
 }
 
 .score-label {
   margin-top: 8px;
   font-size: 14px;
-  color: #909399;
+  color: var(--color-muted);
 }
 
 .dimension-scores {
@@ -222,7 +213,7 @@ function downloadMd() {
 .dimension-name {
   width: 80px;
   font-size: 14px;
-  color: #606266;
+  color: var(--color-body);
 }
 
 .dimension-item :deep(.el-progress) {
@@ -233,7 +224,7 @@ function downloadMd() {
   width: 36px;
   text-align: right;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-ink);
 }
 
 .section-card {
@@ -252,30 +243,42 @@ function downloadMd() {
 
 .phase-summary-item {
   padding: 12px;
-  background: #f5f7fa;
-  border-radius: 6px;
-  color: #606266;
+  border-left: 3px solid var(--color-brand-500);
+  border-radius: var(--radius-sm);
+  color: var(--color-body);
+  background: var(--color-surface-subtle);
   font-size: 14px;
 }
 
 .point-list {
   padding-left: 18px;
   line-height: 2;
-  color: #606266;
+  color: var(--color-body);
 }
 
 .point-list.weak li::marker {
-  color: #F56C6C;
+  color: var(--color-danger);
 }
 
 .point-list.strong li::marker {
-  color: #67C23A;
+  color: var(--color-success);
 }
 
 .action-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  border-color: var(--color-console-soft);
+  background: var(--color-console-soft);
+}
+
+.action-card :deep(.el-card__body) {
+  display: grid;
+  gap: 12px;
+}
+
+.action-card .el-button + .el-button {
+  margin-left: 0;
 }
 
 .action-btn {

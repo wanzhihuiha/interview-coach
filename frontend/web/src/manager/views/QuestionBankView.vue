@@ -1,27 +1,39 @@
 <template>
-  <div class="question-bank-view">
-    <el-card shadow="never">
-      <template #header>
-        <div class="bank-header">
-          <span>永久题库</span>
-        </div>
-      </template>
+  <div class="audit-view">
+    <header class="page-header">
+      <div class="page-heading-copy">
+        <span class="page-eyebrow">PERMANENT KNOWLEDGE BASE</span>
+        <h1 class="page-title">题库管理</h1>
+        <p class="page-subtitle">检索已审核题目与使用数据，为面试生成提供稳定知识来源。</p>
+      </div>
+    </header>
 
-      <el-form :inline="true" :model="queryForm" class="search-form">
-        <el-form-item label="岗位类别">
-          <el-input v-model="queryForm.jobCategory" placeholder="请输入岗位类别" clearable />
-        </el-form-item>
-        <el-form-item label="面试环节">
-          <el-input v-model="queryForm.phase" placeholder="请输入面试环节" clearable />
-        </el-form-item>
-        <el-form-item label="关键字">
-          <el-input v-model="queryForm.keyword" placeholder="主题/内容" clearable />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+    <section class="admin-data-panel">
+      <div class="admin-data-heading">
+        <div>
+          <strong>永久题库</strong>
+          <p>按岗位、面试环节或内容关键字组合检索。</p>
+        </div>
+        <span class="admin-data-count">{{ totalElements }} RECORDS</span>
+      </div>
+
+      <div class="admin-toolbar">
+        <el-form :inline="true" :model="queryForm" class="search-form">
+          <el-form-item label="岗位类别">
+            <el-input v-model="queryForm.jobCategory" placeholder="请输入岗位类别" clearable />
+          </el-form-item>
+          <el-form-item label="面试环节">
+            <el-input v-model="queryForm.phase" placeholder="请输入面试环节" clearable />
+          </el-form-item>
+          <el-form-item label="关键字">
+            <el-input v-model="queryForm.keyword" placeholder="主题/内容" clearable />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleSearch">查询</el-button>
+            <el-button @click="handleReset">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
 
       <el-table :data="questions" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="80" />
@@ -38,7 +50,7 @@
         <el-table-column prop="usageCount" label="使用次数" width="100" />
       </el-table>
 
-      <div class="pagination-wrapper">
+      <div class="admin-pagination">
         <el-pagination
           v-model:current-page="queryForm.page"
           v-model:page-size="queryForm.size"
@@ -49,7 +61,7 @@
           @current-change="handleSearch"
         />
       </div>
-    </el-card>
+    </section>
   </div>
 </template>
 
@@ -105,25 +117,3 @@ function handleReset() {
 
 onMounted(loadQuestions)
 </script>
-
-<style scoped>
-.question-bank-view {
-  padding: 16px;
-}
-
-.bank-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.search-form {
-  margin-bottom: 16px;
-}
-
-.pagination-wrapper {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-</style>

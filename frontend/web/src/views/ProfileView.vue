@@ -1,7 +1,13 @@
 <template>
   <AppLayout>
     <div class="page-container">
-      <h2 class="page-title">个人中心</h2>
+      <header class="page-header">
+        <div class="page-heading-copy">
+          <span class="page-eyebrow">ACCOUNT & SECURITY</span>
+          <h1 class="page-title">个人中心</h1>
+          <p class="page-subtitle">管理账户资料、安全信息与个人面试数据概览。</p>
+        </div>
+      </header>
 
       <el-row :gutter="24">
         <el-col :span="8">
@@ -200,13 +206,6 @@ function resetPasswordForm() {
 </script>
 
 <style scoped>
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 20px;
-}
-
 .profile-card {
   text-align: center;
 }
@@ -219,13 +218,13 @@ function resetPasswordForm() {
   margin-top: 12px;
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-ink);
 }
 
 .user-id {
   margin-top: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-muted);
 }
 
 .stat-list {
@@ -236,7 +235,7 @@ function resetPasswordForm() {
   display: flex;
   justify-content: space-between;
   padding: 12px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .stat-item:last-child {
@@ -244,12 +243,12 @@ function resetPasswordForm() {
 }
 
 .stat-label {
-  color: #606266;
+  color: var(--color-body);
 }
 
 .stat-value {
   font-weight: 600;
-  color: #303133;
+  color: var(--color-ink);
 }
 
 .card-title {

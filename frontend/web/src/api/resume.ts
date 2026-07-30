@@ -1,6 +1,12 @@
 import request from './request'
 import { apiCall } from './request'
-import type { ApiResponse, Resume, ResumeParseStatus, UserProfileData } from '@/types'
+import type {
+  ApiResponse,
+  Resume,
+  ResumeParseStatus,
+  ResumeProfileAnalysisData,
+  UserProfileData
+} from '@/types'
 
 const mockResumes: Resume[] = [
   {
@@ -9,6 +15,7 @@ const mockResumes: Resume[] = [
     fileType: 'PDF',
     status: 'CONFIRMED',
     statusLabel: '已确认',
+    hasConfirmedProfile: true,
     jobCategory: 'TECH',
     jobCategoryLabel: '技术类',
     createdAt: '2026-07-20T10:00:00'
@@ -19,6 +26,7 @@ const mockResumes: Resume[] = [
     fileType: 'TXT',
     status: 'PENDING_CONFIRM',
     statusLabel: '待确认',
+    hasConfirmedProfile: false,
     jobCategory: 'TECH',
     jobCategoryLabel: '技术类',
     createdAt: '2026-07-22T14:30:00'
@@ -65,18 +73,32 @@ export async function getResumeDetail(resumeId: number): Promise<Resume> {
 
 export async function getResumeProfile(resumeId: number): Promise<{
   profile?: UserProfileData
+  confirmedProfile?: UserProfileData
+  draftProfile?: UserProfileData
+  analysis?: ResumeProfileAnalysisData
+  hasConfirmedProfile?: boolean
+  parseGeneration?: number
   experienceLevel?: string
   experienceLevelLabel?: string
   status?: string
   statusLabel?: string
+  analysisStatus?: string
+  analysisErrorMessage?: string
 }> {
   const res = await apiCall(
     () => request.get(`/resumes/${resumeId}/profile`) as Promise<ApiResponse<{
       profile?: UserProfileData
+      confirmedProfile?: UserProfileData
+      draftProfile?: UserProfileData
+      analysis?: ResumeProfileAnalysisData
+      hasConfirmedProfile?: boolean
+      parseGeneration?: number
       experienceLevel?: string
       experienceLevelLabel?: string
       status?: string
       statusLabel?: string
+      analysisStatus?: string
+      analysisErrorMessage?: string
     }>>,
     () => null,
     null
@@ -92,9 +114,16 @@ export async function getResumeParseStatus(resumeId: number): Promise<ResumePars
   return res.data
 }
 
-export async function confirmResume(resumeId: number, profile: UserProfileData): Promise<void> {
+export async function confirmResume(
+  resumeId: number,
+  profile: UserProfileData,
+  parseGeneration: number
+): Promise<void> {
   await apiCall(
-    () => request.put(`/resumes/${resumeId}/confirm`, { profile }) as Promise<ApiResponse<void>>,
+    () => request.put(`/resumes/${resumeId}/confirm`, {
+      parseGeneration,
+      profile
+    }) as Promise<ApiResponse<void>>,
     () => undefined
   )
 }
