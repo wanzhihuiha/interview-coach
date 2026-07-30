@@ -52,8 +52,6 @@
         <span>还没有账号？</span>
         <el-button link type="primary" @click="$router.push('/register')">立即注册</el-button>
       </div>
-
-      <div class="auth-hint"><span>测试账号</span><code>demo / Demo1234</code></div>
   </AuthShell>
 </template>
 
@@ -134,22 +132,5 @@ async function handleLogin() {
   margin-top: 24px;
   color: var(--color-body);
   font-size: 14px;
-}
-
-.auth-hint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 28px;
-  border-top: 1px solid var(--color-border);
-  padding-top: 18px;
-  color: var(--color-muted);
-  font-size: 11px;
-}
-
-.auth-hint code {
-  color: var(--color-ink);
-  font-family: var(--font-mono);
-  font-size: 11px;
 }
 </style>

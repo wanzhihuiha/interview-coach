@@ -255,6 +255,7 @@ export interface InterviewReport {
   positionTitle: string
   totalScore: number
   level: string
+  conclusion?: string
   scores: ScoreItem[]
   phaseSummary: string[]
   weakPoints: string[]

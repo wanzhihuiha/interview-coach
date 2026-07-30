@@ -319,6 +319,7 @@ export async function getInterviewReport(id: number): Promise<InterviewReport | 
     positionTitle: '',
     totalScore: dto.overallScore,
     level: dto.grade,
+    conclusion: dto.conclusion,
     scores: [
       { name: '技术深度', score: dto.dimensions.technicalDepth },
       { name: '技术广度', score: dto.dimensions.technicalBreadth },
