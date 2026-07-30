@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.Setter;
@@ -45,6 +46,24 @@ public class Resume {
     @Enumerated(EnumType.STRING)
     @Column(name = "parse_status", nullable = false, length = 30)
     private ResumeParseStatus parseStatus = ResumeParseStatus.PENDING;
+
+    @Column(name = "parse_generation", nullable = false)
+    private Long parseGeneration = 0L;
+
+    @Column(name = "parse_started_at")
+    private LocalDateTime parseStartedAt;
+
+    @Column(name = "parse_error_code", length = 50)
+    private String parseErrorCode;
+
+    @Column(name = "parse_error_message", length = 500)
+    private String parseErrorMessage;
+
+    @Column(name = "parse_quota_date")
+    private LocalDate parseQuotaDate;
+
+    @Column(name = "parse_quota_token", length = 64)
+    private String parseQuotaToken;
 
     @Column(name = "job_category", length = 30)
     private String jobCategory;

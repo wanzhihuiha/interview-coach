@@ -10,8 +10,10 @@ import com.interviewcoach.interview.domain.model.InterviewContext;
 import com.interviewcoach.interview.infrastructure.tool.QuestionBankTool;
 import com.interviewcoach.interview.infrastructure.tool.SkillsTool;
 import com.interviewcoach.resume.domain.model.UserProfileData;
+import com.interviewcoach.resume.domain.model.ResumeProfileAnalysisData;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -191,14 +193,48 @@ public class InterviewerAgent {
             positionName = context.getPositionProfile().getBasicInfo().getTitle();
             positionLevel = context.getPositionProfile().getBasicInfo().getLevel();
         }
-        String userName = "";
-        if (context.getUserProfile() != null && context.getUserProfile().getBasicInfo() != null) {
-            userName = context.getUserProfile().getBasicInfo().getName();
-        }
         return "**面试上下文**\n"
                 + "- 岗位：" + positionName + "\n"
                 + "- 岗位等级：" + positionLevel + "\n"
-                + "- 候选人：" + userName;
+                + "- 候选人：候选人"
+                + buildAnalysisHints(context.getUserProfileAnalysis());
+    }
+
+    /**
+     * 分析内容只作为待验证选题线索，提示词中明确禁止将其当作既定能力结论。
+     */
+    private String buildAnalysisHints(ResumeProfileAnalysisData analysis) {
+        if (analysis == null) {
+            return "";
+        }
+        List<String> strengths = analysis.getStrengths() == null ? List.of()
+                : analysis.getStrengths().stream()
+                .filter(Objects::nonNull)
+                .map(ResumeProfileAnalysisData.AnalysisItem::getContent)
+                .filter(content -> content != null && !content.isBlank())
+                .limit(3)
+                .toList();
+        List<String> verificationPoints = analysis.getVerificationPoints() == null ? List.of()
+                : analysis.getVerificationPoints().stream()
+                .filter(Objects::nonNull)
+                .map(ResumeProfileAnalysisData.AnalysisItem::getContent)
+                .filter(content -> content != null && !content.isBlank())
+                .limit(3)
+                .toList();
+        List<String> skillAssessments = analysis.getSkillAssessments() == null ? List.of()
+                : analysis.getSkillAssessments().stream()
+                .filter(item -> item != null && item.getSkill() != null)
+                .map(item -> item.getSkill() + "："
+                        + (item.getInferredLevel() == null ? "待验证" : item.getInferredLevel()))
+                .limit(5)
+                .toList();
+        if (strengths.isEmpty() && verificationPoints.isEmpty() && skillAssessments.isEmpty()) {
+            return "";
+        }
+        return "\n- 可能优势（需通过回答验证）：" + String.join("；", strengths)
+                + "\n- 待验证能力点：" + String.join("；", verificationPoints)
+                + "\n- 推断技能水平（需验证）：" + String.join("；", skillAssessments)
+                + "\n以上内容只用于选题，不得直接作为评分或结论。";
     }
 
     private String extractQuestion(String json) {

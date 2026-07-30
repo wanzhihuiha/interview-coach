@@ -18,11 +18,19 @@ public class MockLlmService implements LlmService {
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.REPORT,
             AgentType.COACH, AgentType.RESUME_ANALYSIS, AgentType.JD_ANALYSIS})
     public String chat(String systemPrompt, String userPrompt) {
-        log.warn("[MockLlmService] LLM is disabled, returning empty profile JSON");
+        log.warn("[MockLlmService] LLM is disabled, returning mock JSON");
+        if (userPrompt != null && userPrompt.contains("verificationPoints")) {
+            return """
+                    {
+                      "strengths": [],
+                      "verificationPoints": [],
+                      "skillAssessments": []
+                    }
+                    """;
+        }
         return """
                 {
                   "basicInfo": {
-                    "name": "候选人",
                     "workingYears": "",
                     "currentPosition": "",
                     "education": ""
@@ -30,10 +38,7 @@ public class MockLlmService implements LlmService {
                   "skillTags": [],
                   "skillLevel": {},
                   "projectExperience": [],
-                  "workExperience": [],
-                  "strengths": [],
-                  "weaknesses": [],
-                  "confidenceLevel": 0.0
+                  "workExperience": []
                 }
                 """;
     }

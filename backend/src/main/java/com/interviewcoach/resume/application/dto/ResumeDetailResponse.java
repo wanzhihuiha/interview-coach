@@ -19,6 +19,9 @@ public class ResumeDetailResponse {
     private String jobCategory;
     private String jobCategoryLabel;
     private UserProfileData parsedData;
+    private Boolean hasConfirmedProfile;
+    private String parseErrorCode;
+    private String parseErrorMessage;
     private LocalDateTime createdAt;
     private LocalDateTime confirmedAt;
 }

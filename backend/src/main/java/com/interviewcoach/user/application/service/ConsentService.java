@@ -72,6 +72,18 @@ public class ConsentService {
         return consentRecordRepository.hasConsented(userId, ConsentType.LLM_SERVICE);
     }
 
+    /**
+     * 在调用外部模型前同时校验 LLM 服务和隐私政策同意，避免只依赖前端弹窗。
+     */
+    @Transactional(readOnly = true)
+    public void requireAiProcessingConsent(Long userId) {
+        boolean llmService = consentRecordRepository.hasConsented(userId, ConsentType.LLM_SERVICE);
+        boolean privacyPolicy = consentRecordRepository.hasConsented(userId, ConsentType.PRIVACY_POLICY);
+        if (!llmService || !privacyPolicy) {
+            throw new BusinessException(UserErrorCode.CONSENT_REQUIRED, "请先同意 LLM 服务条款和隐私政策");
+        }
+    }
+
     private ConsentType parseConsentType(String value) {
         try {
             return ConsentType.valueOf(value.toUpperCase());

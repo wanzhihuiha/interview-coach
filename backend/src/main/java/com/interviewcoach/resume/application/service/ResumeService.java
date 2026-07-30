@@ -2,24 +2,35 @@ package com.interviewcoach.resume.application.service;
 
 import static com.interviewcoach.resume.application.service.ResumeErrorCode.*;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.interviewcoach.common.domain.JobCategoryType;
 import com.interviewcoach.common.exception.BusinessException;
+import com.interviewcoach.resume.application.dto.ResumeDetailResponse;
+import com.interviewcoach.resume.application.dto.ResumeListItemResponse;
+import com.interviewcoach.resume.application.dto.ResumeListResponse;
 import com.interviewcoach.resume.application.dto.ResumeParseStatusResponse;
-import com.interviewcoach.resume.application.event.ResumeParseRequestedEvent;
+import com.interviewcoach.resume.application.dto.ResumeProfileAnalysisRetryRequest;
+import com.interviewcoach.resume.application.dto.ResumeProfileResponse;
+import com.interviewcoach.resume.application.dto.ResumeUploadResponse;
+import com.interviewcoach.resume.application.service.ResumePersistenceService.ConfirmedResume;
+import com.interviewcoach.resume.application.service.ResumeProfileAnalysisStateService.AnalysisView;
 import com.interviewcoach.resume.domain.entity.ExperienceLevel;
 import com.interviewcoach.resume.domain.entity.Resume;
 import com.interviewcoach.resume.domain.entity.ResumeParseStatus;
 import com.interviewcoach.resume.domain.entity.ResumeProfile;
+import com.interviewcoach.resume.domain.entity.ResumeProfileDraft;
 import com.interviewcoach.resume.domain.model.UserProfileData;
+import com.interviewcoach.resume.domain.repository.ResumeProfileDraftRepository;
 import com.interviewcoach.resume.domain.repository.ResumeProfileRepository;
 import com.interviewcoach.resume.domain.repository.ResumeRepository;
 import com.interviewcoach.resume.infrastructure.storage.FileStorageService;
+import com.interviewcoach.resume.infrastructure.redis.ResumeUserMutationLock;
+import com.interviewcoach.user.application.service.ConsentService;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -28,10 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 简历应用服务，负责用户侧简历管理与解析任务编排。
- *
- * <p>上传和重新解析只在当前事务中登记 {@link ResumeParseRequestedEvent}；
- * 真正的文件提取、缓存访问和 LLM 分析由事务提交后的后台任务执行。</p>
+ * 简历应用服务，编排上传、事实草稿、用户确认、重新解析和辅助分析。
  */
 @Slf4j
 @Service
@@ -39,66 +47,49 @@ import org.springframework.web.multipart.MultipartFile;
 public class ResumeService {
 
     private final ResumeRepository resumeRepository;
-    private final ResumeProfileRepository resumeProfileRepository;
+    private final ResumeProfileRepository profileRepository;
+    private final ResumeProfileDraftRepository draftRepository;
     private final FileStorageService fileStorageService;
-    private final ResumeProfileSupport resumeProfileSupport;
-    private final ObjectMapper objectMapper;
-    private final ApplicationEventPublisher eventPublisher;
-
-    @Value("${resume.upload.max-size:10485760}")
-    private long maxFileSize;
+    private final ResumePersistenceService persistenceService;
+    private final ResumeUploadService uploadService;
+    private final ResumeAiTaskSubmissionService taskSubmissionService;
+    private final ResumeUserMutationLock mutationLock;
+    private final ResumeProfileSupport profileSupport;
+    private final ResumeProfileAnalysisStateService analysisStateService;
+    private final ConsentService consentService;
 
     /**
-     * 保存上传文件和 {@code PENDING} 简历记录，并登记后台解析事件。
-     * 事件监听器仅在当前事务成功提交后入队，避免后台任务读取到未提交记录。
+     * 上传的文件、数据库、Redis 许可与日额度由独立补偿编排处理。
      */
-    @Transactional
-    public com.interviewcoach.resume.application.dto.ResumeUploadResponse uploadResume(Long userId, MultipartFile file, String fileType) {
-        validateFile(file, fileType);
-
-        String filePath = fileStorageService.store(userId, file);
-
-        Resume resume = new Resume();
-        resume.setUserId(userId);
-        resume.setResumeName(file.getOriginalFilename());
-        resume.setFilePath(filePath);
-        resume.setFileType(fileType.toUpperCase());
-        resume.setFileSize(file.getSize());
-        resume.setParseStatus(ResumeParseStatus.PENDING);
-        resumeRepository.save(resume);
-
-        eventPublisher.publishEvent(new ResumeParseRequestedEvent(resume.getId(), userId, false));
-        log.info("[ResumeParse] 上传解析请求已登记，等待事务提交后调度: resumeId={}, userId={}, fileType={}, fileSize={}",
-                resume.getId(), userId, resume.getFileType(), resume.getFileSize());
-
-        return new com.interviewcoach.resume.application.dto.ResumeUploadResponse(
-                resume.getId(), resume.getResumeName(), resume.getParseStatus().name(),
-                resume.getParseStatus().getDisplayName(), 10);
+    public ResumeUploadResponse uploadResume(Long userId, MultipartFile file, String fileType) {
+        return uploadService.upload(userId, file, fileType);
     }
 
-    /**
-     * 查询简历列表。
-     */
     @Transactional(readOnly = true)
-    public com.interviewcoach.resume.application.dto.ResumeListResponse listResumes(Long userId, int page, int size) {
+    public ResumeListResponse listResumes(Long userId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         Page<Resume> resumePage = resumeRepository.findByUserId(userId, pageable);
+        List<Long> resumeIds = resumePage.getContent().stream().map(Resume::getId).toList();
+        Set<Long> confirmedIds = resumeIds.isEmpty() ? Set.of()
+                : new HashSet<>(profileRepository.findResumeIdsByUserIdAndResumeIdIn(userId, resumeIds));
 
-        com.interviewcoach.resume.application.dto.ResumeListResponse response = new com.interviewcoach.resume.application.dto.ResumeListResponse();
-        response.setContent(resumePage.getContent().stream().map(this::toListItem).toList());
+        ResumeListResponse response = new ResumeListResponse();
+        response.setContent(resumePage.getContent().stream()
+                .map(resume -> toListItem(resume, confirmedIds.contains(resume.getId())))
+                .toList());
         response.setTotalElements(resumePage.getTotalElements());
         response.setTotalPages(resumePage.getTotalPages());
         response.setCurrentPage(resumePage.getNumber());
         return response;
     }
 
-    /**
-     * 查询简历详情。
-     */
     @Transactional(readOnly = true)
-    public com.interviewcoach.resume.application.dto.ResumeDetailResponse getResumeDetail(Long userId, Long resumeId) {
+    public ResumeDetailResponse getResumeDetail(Long userId, Long resumeId) {
         Resume resume = findResumeByIdAndUserId(resumeId, userId);
-        com.interviewcoach.resume.application.dto.ResumeDetailResponse response = new com.interviewcoach.resume.application.dto.ResumeDetailResponse();
+        Optional<ResumeProfile> confirmed = profileRepository.findByResumeIdAndUserId(resumeId, userId);
+        Optional<ResumeProfileDraft> draft = currentDraft(resume, userId);
+
+        ResumeDetailResponse response = new ResumeDetailResponse();
         response.setResumeId(resume.getId());
         response.setFileName(resume.getResumeName());
         response.setFileType(resume.getFileType());
@@ -107,178 +98,171 @@ public class ResumeService {
         response.setStatusLabel(resume.getParseStatus().getDisplayName());
         response.setJobCategory(resume.getJobCategory());
         response.setJobCategoryLabel(JobCategoryType.displayNameOf(resume.getJobCategory()));
+        response.setParsedData(draft.map(item -> profileSupport.fromJson(resumeId, item.getProfileData()))
+                .orElseGet(() -> confirmed.map(item -> profileSupport.fromJson(resumeId, item.getProfileData()))
+                        .orElse(null)));
+        response.setHasConfirmedProfile(confirmed.isPresent());
+        response.setParseErrorCode(resume.getParseErrorCode());
+        response.setParseErrorMessage(resume.getParseErrorMessage());
         response.setCreatedAt(resume.getCreatedAt());
-        response.setConfirmedAt(resume.getParseStatus() == ResumeParseStatus.CONFIRMED ? resume.getUpdatedAt() : null);
-
-        resumeProfileRepository.findByResumeId(resumeId)
-                .ifPresent(profile -> response.setParsedData(parseProfileJson(resumeId, profile.getProfileData())));
+        response.setConfirmedAt(confirmed.map(ResumeProfile::getConfirmedAt).orElse(null));
         return response;
     }
 
-    /**
-     * 查询简历画像。
-     */
     @Transactional(readOnly = true)
-    public com.interviewcoach.resume.application.dto.ResumeProfileResponse getResumeProfile(Long userId, Long resumeId) {
+    public ResumeProfileResponse getResumeProfile(Long userId, Long resumeId) {
         Resume resume = findResumeByIdAndUserId(resumeId, userId);
-        ResumeProfile profile = resumeProfileRepository.findByResumeId(resumeId)
-                .orElseThrow(() -> new BusinessException(RESUME_NOT_FOUND, "简历画像不存在"));
+        Optional<ResumeProfile> confirmed = profileRepository.findByResumeIdAndUserId(resumeId, userId);
+        Optional<ResumeProfileDraft> draft = currentDraft(resume, userId);
+        Optional<AnalysisView> analysis = analysisStateService.loadCurrent(resumeId, userId);
+        if (confirmed.isEmpty() && draft.isEmpty()) {
+            throw new BusinessException(RESUME_NOT_FOUND, "简历画像不存在");
+        }
 
-        com.interviewcoach.resume.application.dto.ResumeProfileResponse response = new com.interviewcoach.resume.application.dto.ResumeProfileResponse();
-        response.setProfileId(profile.getId());
-        response.setResumeId(profile.getResumeId());
-        response.setProfile(parseProfileJson(resumeId, profile.getProfileData()));
-        response.setExperienceLevel(profile.getExperienceLevel());
-        response.setExperienceLevelLabel(ExperienceLevel.displayNameOf(profile.getExperienceLevel()));
+        UserProfileData confirmedData = confirmed
+                .map(item -> profileSupport.fromJson(resumeId, item.getProfileData())).orElse(null);
+        UserProfileData draftData = draft
+                .map(item -> profileSupport.fromJson(resumeId, item.getProfileData())).orElse(null);
+        ResumeProfileResponse response = new ResumeProfileResponse();
+        response.setProfileId(confirmed.map(ResumeProfile::getId).orElse(null));
+        response.setResumeId(resumeId);
+        response.setProfile(draftData != null ? draftData : confirmedData);
+        response.setConfirmedProfile(confirmedData);
+        response.setDraftProfile(draftData);
+        response.setAnalysis(analysis.map(AnalysisView::data).orElse(null));
+        response.setHasConfirmedProfile(confirmed.isPresent());
+        response.setParseGeneration(resume.getParseGeneration());
+        String experienceLevel = draft.map(ResumeProfileDraft::getExperienceLevel)
+                .orElseGet(() -> confirmed.map(ResumeProfile::getExperienceLevel).orElse(null));
+        response.setExperienceLevel(experienceLevel);
+        response.setExperienceLevelLabel(ExperienceLevel.displayNameOf(experienceLevel));
         response.setStatus(resume.getParseStatus().name());
         response.setStatusLabel(resume.getParseStatus().getDisplayName());
+        response.setAnalysisUsableForInterview(false);
+        response.setAnalysisRefineAllowed(false);
+        analysis.ifPresent(view -> {
+            response.setAnalysisStatus(view.effectiveStatus().name());
+            response.setAnalysisErrorMessage(view.effectiveErrorMessage());
+            response.setAnalysisUsableForInterview(view.usableForInterview());
+            response.setAnalysisRefineAllowed(view.refineAllowed());
+            response.setAnalysisTaskGeneration(view.entity().getTaskGeneration());
+            response.setAnalysisMode(view.entity().getTaskMode() == null
+                    ? null : view.entity().getTaskMode().name());
+        });
         return response;
     }
 
-    /**
-     * 查询简历后台解析任务的当前状态。
-     * 返回的进度是状态对应的展示值，不代表文件或 LLM 的实时完成百分比。
-     */
     @Transactional(readOnly = true)
     public ResumeParseStatusResponse getParseStatus(Long userId, Long resumeId) {
         Resume resume = findResumeByIdAndUserId(resumeId, userId);
-        int progress = parseProgress(resume.getParseStatus());
-        log.debug("[ResumeParse] 查询解析状态: resumeId={}, status={}, progress={}",
-                resumeId, resume.getParseStatus(), progress);
+        boolean hasConfirmed = profileRepository.findByResumeIdAndUserId(resumeId, userId).isPresent();
+        String analysisStatus = analysisStateService.loadCurrent(resumeId, userId)
+                .map(view -> view.effectiveStatus().name()).orElse(null);
         return new ResumeParseStatusResponse(
                 resume.getId(),
                 resume.getParseStatus().name(),
                 resume.getParseStatus().getDisplayName(),
-                progress,
+                parseProgress(resume.getParseStatus()),
+                resume.getParseGeneration(),
+                hasConfirmed,
+                resume.getParseErrorCode(),
+                resume.getParseErrorMessage(),
+                analysisStatus,
                 resume.getUpdatedAt());
     }
 
     /**
-     * 用户确认并覆盖当前画像，将简历从 {@code PENDING_CONFIRM} 推进为 {@code CONFIRMED}。
-     * 画像写入、岗位类别更新和状态流转处于同一事务中。
+     * 保存当前代次的用户编辑草稿；新接口必须携带 generation，防止旧页面覆盖新结果。
      */
     @Transactional
-    public void confirmResume(Long userId, Long resumeId, UserProfileData profileData) {
-        Resume resume = findResumeByIdAndUserId(resumeId, userId);
+    public void updateProfileDraft(
+            Long userId, Long resumeId, Long requestedGeneration, UserProfileData profileData) {
+        Resume resume = findResumeByIdAndUserIdForUpdate(resumeId, userId);
         if (resume.getParseStatus() != ResumeParseStatus.PENDING_CONFIRM) {
-            throw new BusinessException(RESUME_STATUS_INVALID, "当前状态不允许确认");
+            throw new BusinessException(RESUME_STATUS_INVALID, "当前状态不允许修改画像草稿");
         }
-        if (profileData == null) {
-            throw new BusinessException(PROFILE_DATA_INVALID, "画像数据无效");
-        }
-
-        resumeProfileSupport.saveProfile(resumeId, userId, profileData);
-        resume.setParseStatus(ResumeParseStatus.CONFIRMED);
-        resume.setJobCategory(resumeProfileSupport.inferJobCategory(profileData));
-        resumeRepository.save(resume);
-        log.info("[ResumeParse] 用户确认结果已写入当前事务: resumeId={}, userId={}, from={}, to={}",
-                resumeId, userId, ResumeParseStatus.PENDING_CONFIRM, ResumeParseStatus.CONFIRMED);
+        Long generation = requireCurrentGeneration(requestedGeneration, resume);
+        profileSupport.updateDraft(resumeId, userId, generation, profileData);
     }
 
     /**
-     * 将可重新处理的简历重置为 {@code PENDING} 并登记强制刷新事件。
-     * 强制刷新会绕过已有缓存读取；事件仍只在当前事务提交后入队。
+     * 先独立提交正式事实，再尝试可选 INITIAL；后一步失败不会回滚或覆盖已确认事实。
      */
-    @Transactional
-    public com.interviewcoach.resume.application.dto.ResumeUploadResponse reparseResume(Long userId, Long resumeId) {
-        Resume resume = findResumeByIdAndUserId(resumeId, userId);
-        if (resume.isLocked()) {
-            throw new BusinessException(RESUME_LOCKED, "简历已锁定，不可重新解析");
-        }
-        if (resume.getParseStatus() == ResumeParseStatus.PENDING
-                || resume.getParseStatus() == ResumeParseStatus.PARSING) {
-            throw new BusinessException(RESUME_PARSING_IN_PROGRESS, "简历正在解析中，请稍后再试");
-        }
-
-        ResumeParseStatus previousStatus = resume.getParseStatus();
-        resume.setParseStatus(ResumeParseStatus.PENDING);
-        resumeRepository.save(resume);
-        eventPublisher.publishEvent(new ResumeParseRequestedEvent(resume.getId(), userId, true));
-        log.info("[ResumeParse] 重新解析请求已登记，等待事务提交后调度: resumeId={}, userId={}, from={}, to={}, forceRefresh=true",
-                resumeId, userId, previousStatus, ResumeParseStatus.PENDING);
-
-        return new com.interviewcoach.resume.application.dto.ResumeUploadResponse(
-                resume.getId(), resume.getResumeName(), resume.getParseStatus().name(),
-                resume.getParseStatus().getDisplayName(), 10);
+    public void confirmResume(
+            Long userId, Long resumeId, Long requestedGeneration, UserProfileData profileData) {
+        consentService.requireAiProcessingConsent(userId);
+        ConfirmedResume confirmed = persistenceService.confirmProfile(
+                userId, resumeId, requestedGeneration, profileData);
+        taskSubmissionService.submitOptionalInitial(userId, confirmed);
     }
 
     /**
-     * 删除简历。
+     * 保留当前正式画像并创建新解析代次；提交后才把任务交给进程内线程池。
      */
-    @Transactional
+    public ResumeUploadResponse reparseResume(Long userId, Long resumeId) {
+        consentService.requireAiProcessingConsent(userId);
+        Resume resume = taskSubmissionService.submitManualReparse(userId, resumeId);
+        return toUploadResponse(resume);
+    }
+
+    /**
+     * 只重试当前正式画像的辅助分析，不重新解析原简历文件。
+     */
+    public void retryProfileAnalysis(
+            Long userId, Long resumeId, ResumeProfileAnalysisRetryRequest request) {
+        consentService.requireAiProcessingConsent(userId);
+        taskSubmissionService.submitManualAnalysis(userId, resumeId, request);
+    }
+
     public void deleteResume(Long userId, Long resumeId) {
-        Resume resume = findResumeByIdAndUserId(resumeId, userId);
-        if (resume.isLocked()) {
-            throw new BusinessException(RESUME_LOCKED_FOR_DELETE, "简历已锁定，不可删除");
-        }
-        fileStorageService.delete(resume.getFilePath());
-        resumeProfileRepository.findByResumeId(resumeId).ifPresent(resumeProfileRepository::delete);
-        resumeRepository.delete(resume);
+        String filePath = mutationLock.execute(
+                userId, () -> persistenceService.deleteOwned(userId, resumeId));
+        fileStorageService.delete(filePath);
     }
 
-    private void validateFile(MultipartFile file, String fileType) {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(FILE_READ_FAILED, "文件为空");
-        }
-        if (file.getSize() > maxFileSize) {
-            throw new BusinessException(FILE_SIZE_EXCEEDED, "文件大小超过10MB限制");
-        }
-        String type = fileType == null ? "" : fileType.toUpperCase();
-        if (!type.equals("PDF") && !type.equals("TXT")) {
-            throw new BusinessException(FILE_TYPE_NOT_SUPPORTED, "仅支持 PDF 和 TXT 格式");
-        }
+    private Optional<ResumeProfileDraft> currentDraft(Resume resume, Long userId) {
+        return draftRepository.findByResumeIdAndUserId(resume.getId(), userId)
+                .filter(draft -> draft.getParseGeneration().equals(resume.getParseGeneration()));
     }
 
-    /**
-     * 按简历 ID 和可信用户 ID 联合查询，避免仅凭客户端传入的简历 ID 跨用户访问。
-     */
+    private Long requireCurrentGeneration(Long requestedGeneration, Resume resume) {
+        if (requestedGeneration == null || !requestedGeneration.equals(resume.getParseGeneration())) {
+            throw new BusinessException(PROFILE_DRAFT_STALE, "画像草稿已过期，请刷新后重试");
+        }
+        return requestedGeneration;
+    }
+
     private Resume findResumeByIdAndUserId(Long resumeId, Long userId) {
         return resumeRepository.findByIdAndUserId(resumeId, userId)
                 .orElseThrow(() -> new BusinessException(RESUME_NOT_FOUND, "简历不存在"));
     }
 
-    /**
-     * 读取已持久化画像；兼容 H2 的 JSON 字符串字面量，空值或坏 JSON 降级为空画像。
-     */
-    private UserProfileData parseProfileJson(Long resumeId, String json) {
-        if (json == null || json.isBlank()) {
-            return UserProfileData.empty();
-        }
-        String normalized = json.trim();
-        // H2 JSON 列可能把对象存成了 JSON 字符串字面量，需要二次解析
-        if (normalized.startsWith("\"") && normalized.endsWith("\"")) {
-            try {
-                normalized = objectMapper.readValue(normalized, String.class);
-            } catch (JsonProcessingException e) {
-                log.warn("[ResumeQuery] H2 画像字符串字面量解码失败，尝试直接解析: resumeId={}, errorType={}",
-                        resumeId, e.getClass().getSimpleName());
-            }
-        }
-        try {
-            return objectMapper.readValue(normalized, UserProfileData.class);
-        } catch (JsonProcessingException e) {
-            log.warn("[ResumeQuery] 画像 JSON 解析失败，返回空画像: resumeId={}, stage=PROFILE_DESERIALIZATION, errorType={}",
-                    resumeId, e.getClass().getSimpleName());
-            return UserProfileData.empty();
-        }
+    private Resume findResumeByIdAndUserIdForUpdate(Long resumeId, Long userId) {
+        return resumeRepository.findByIdAndUserIdForUpdate(resumeId, userId)
+                .orElseThrow(() -> new BusinessException(RESUME_NOT_FOUND, "简历不存在"));
     }
 
-    private com.interviewcoach.resume.application.dto.ResumeListItemResponse toListItem(Resume resume) {
-        com.interviewcoach.resume.application.dto.ResumeListItemResponse item = new com.interviewcoach.resume.application.dto.ResumeListItemResponse();
+    private ResumeListItemResponse toListItem(Resume resume, boolean hasConfirmedProfile) {
+        ResumeListItemResponse item = new ResumeListItemResponse();
         item.setResumeId(resume.getId());
         item.setFileName(resume.getResumeName());
         item.setStatus(resume.getParseStatus().name());
         item.setStatusLabel(resume.getParseStatus().getDisplayName());
         item.setJobCategory(resume.getJobCategory());
         item.setJobCategoryLabel(JobCategoryType.displayNameOf(resume.getJobCategory()));
+        item.setHasConfirmedProfile(hasConfirmedProfile);
+        item.setParseErrorMessage(resume.getParseErrorMessage());
         item.setCreatedAt(resume.getCreatedAt());
         item.setUpdatedAt(resume.getUpdatedAt());
         return item;
     }
 
-    /**
-     * 将持久化状态映射为前端展示进度；该值是离散提示，不是任务内部实时进度。
-     */
+    private ResumeUploadResponse toUploadResponse(Resume resume) {
+        return new ResumeUploadResponse(
+                resume.getId(), resume.getResumeName(), resume.getParseStatus().name(),
+                resume.getParseStatus().getDisplayName(), 10);
+    }
+
     private int parseProgress(ResumeParseStatus status) {
         return switch (status) {
             case PENDING -> 10;

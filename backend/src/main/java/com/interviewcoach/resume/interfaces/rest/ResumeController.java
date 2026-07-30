@@ -5,8 +5,10 @@ import com.interviewcoach.resume.application.dto.ConfirmResumeRequest;
 import com.interviewcoach.resume.application.dto.ResumeDetailResponse;
 import com.interviewcoach.resume.application.dto.ResumeListResponse;
 import com.interviewcoach.resume.application.dto.ResumeParseStatusResponse;
+import com.interviewcoach.resume.application.dto.ResumeProfileAnalysisRetryRequest;
 import com.interviewcoach.resume.application.dto.ResumeProfileResponse;
 import com.interviewcoach.resume.application.dto.ResumeUploadResponse;
+import com.interviewcoach.resume.application.dto.UpdateResumeProfileDraftRequest;
 import com.interviewcoach.resume.application.service.ResumeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -79,7 +81,17 @@ public class ResumeController {
             @AuthenticationPrincipal Long userId,
             @PathVariable("id") Long resumeId,
             @Valid @RequestBody ConfirmResumeRequest request) {
-        resumeService.confirmResume(userId, resumeId, request.getProfile());
+        resumeService.confirmResume(userId, resumeId, request.getParseGeneration(), request.getProfile());
+        return ApiResponse.success();
+    }
+
+    @PutMapping("/{id}/profile/draft")
+    public ApiResponse<Void> updateProfileDraft(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable("id") Long resumeId,
+            @Valid @RequestBody UpdateResumeProfileDraftRequest request) {
+        resumeService.updateProfileDraft(
+                userId, resumeId, request.getParseGeneration(), request.getProfile());
         return ApiResponse.success();
     }
 
@@ -88,6 +100,15 @@ public class ResumeController {
             @AuthenticationPrincipal Long userId,
             @PathVariable("id") Long resumeId) {
         return ApiResponse.success(resumeService.reparseResume(userId, resumeId));
+    }
+
+    @PostMapping("/{id}/analysis/retry")
+    public ApiResponse<Void> retryProfileAnalysis(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable("id") Long resumeId,
+            @RequestBody(required = false) ResumeProfileAnalysisRetryRequest request) {
+        resumeService.retryProfileAnalysis(userId, resumeId, request);
+        return ApiResponse.success();
     }
 
     @DeleteMapping("/{id}")

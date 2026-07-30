@@ -39,6 +39,9 @@ public class Interview {
     @Column(name = "user_profile", columnDefinition = "TEXT")
     private String userProfileSnapshot;
 
+    @Column(name = "user_profile_analysis", columnDefinition = "TEXT")
+    private String userProfileAnalysisSnapshot;
+
     @Column(name = "position_profile", columnDefinition = "TEXT")
     private String positionProfileSnapshot;
 

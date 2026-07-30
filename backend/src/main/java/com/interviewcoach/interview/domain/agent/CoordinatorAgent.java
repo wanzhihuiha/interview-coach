@@ -18,6 +18,7 @@ import com.interviewcoach.interview.infrastructure.tool.EvaluationFallbackTool;
 import com.interviewcoach.position.domain.model.PositionProfileData;
 import com.interviewcoach.position.domain.repository.PositionRepository;
 import com.interviewcoach.resume.domain.model.UserProfileData;
+import com.interviewcoach.resume.domain.model.ResumeProfileAnalysisData;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -43,15 +44,17 @@ public class CoordinatorAgent {
     private final ObjectMapper objectMapper;
 
     /**
-     * 初始化面试上下文。
+     * 从面试快照初始化运行上下文；辅助分析随上下文传递，但不进入评估器和评分流程。
      */
     public InterviewContext initialize(Interview interview, UserProfileData userProfile,
+                                       ResumeProfileAnalysisData userProfileAnalysis,
                                        PositionProfileData positionProfile) {
         return AgentContext.runAs(AgentType.COORDINATOR, () -> {
             InterviewContext context = new InterviewContext();
             context.setInterviewId(interview.getId());
             context.setUserId(interview.getUserId());
             context.setUserProfile(userProfile);
+            context.setUserProfileAnalysis(userProfileAnalysis);
             context.setPositionProfile(positionProfile);
             context.setJobCategory(resolveJobCategory(interview.getPositionId()));
             context.setSelectedPhases(parsePhases(interview.getSelectedPhases()));

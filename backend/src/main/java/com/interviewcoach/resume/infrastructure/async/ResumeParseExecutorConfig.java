@@ -1,47 +1,37 @@
 package com.interviewcoach.resume.infrastructure.async;
 
-import java.util.concurrent.ArrayBlockingQueue;
+import com.interviewcoach.resume.infrastructure.redis.ResumeAiTaskLeaseRunner;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ScheduledExecutorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 简历解析任务线程池配置，限制并发和排队数量，避免集中占满 LLM 与应用资源。
- * 队列满时使用拒绝策略，由事件监听器记录失败并更新任务状态。
+ * 简历 AI 任务使用虚拟线程逐任务执行；并发上限由提交前的分布式许可控制。
  */
 @Slf4j
 @Configuration
 public class ResumeParseExecutorConfig {
 
     public static final String EXECUTOR_BEAN_NAME = "resumeParseExecutor";
-    private static final int POOL_SIZE = 2;
-    private static final int QUEUE_CAPACITY = 20;
-
     /**
-     * 创建仅供简历解析使用的有界线程池，应用关闭时由 Spring 调用 shutdown。
+     * 每个被准入的任务立即获得独立虚拟线程，不再使用固定平台线程或业务等待队列。
      */
     @Bean(name = EXECUTOR_BEAN_NAME, destroyMethod = "shutdown")
     public ExecutorService resumeParseExecutor() {
-        log.info("[ResumeParse] 初始化解析线程池: poolSize={}, queueCapacity={}, rejectionPolicy={}",
-                POOL_SIZE, QUEUE_CAPACITY, ThreadPoolExecutor.AbortPolicy.class.getSimpleName());
-        AtomicInteger sequence = new AtomicInteger();
-        ThreadFactory threadFactory = runnable -> {
-            Thread thread = new Thread(runnable, "resume-parse-" + sequence.incrementAndGet());
-            thread.setDaemon(false);
-            return thread;
-        };
-        return new ThreadPoolExecutor(
-                POOL_SIZE,
-                POOL_SIZE,
-                0L,
-                TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(QUEUE_CAPACITY),
-                threadFactory,
-                new ThreadPoolExecutor.AbortPolicy());
+        log.info("[ResumeTask] 初始化逐任务虚拟线程执行器");
+        return Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("resume-ai-", 0).factory());
+    }
+
+    /**
+     * 单个平台调度线程只负责许可续期，不承载 Worker 或业务排队。
+     */
+    @Bean(name = ResumeAiTaskLeaseRunner.RENEW_EXECUTOR_BEAN_NAME, destroyMethod = "shutdown")
+    public ScheduledExecutorService resumeAiTaskLeaseRenewExecutor() {
+        return Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon(true).name("resume-ai-lease-renew").factory());
     }
 }

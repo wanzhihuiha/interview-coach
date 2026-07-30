@@ -17,5 +17,10 @@ public class ResumeParseStatusResponse {
     private String status;
     private String statusLabel;
     private Integer parseProgress;
+    private Long parseGeneration;
+    private Boolean hasConfirmedProfile;
+    private String errorCode;
+    private String errorMessage;
+    private String analysisStatus;
     private LocalDateTime updatedAt;
 }

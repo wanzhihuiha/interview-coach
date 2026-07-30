@@ -30,11 +30,12 @@ import com.interviewcoach.position.domain.model.PositionProfileData;
 import com.interviewcoach.position.domain.repository.PositionProfileRepository;
 import com.interviewcoach.position.domain.repository.PositionRepository;
 import com.interviewcoach.resume.domain.entity.Resume;
-import com.interviewcoach.resume.domain.entity.ResumeParseStatus;
 import com.interviewcoach.resume.domain.entity.ResumeProfile;
 import com.interviewcoach.resume.domain.model.UserProfileData;
+import com.interviewcoach.resume.domain.model.ResumeProfileAnalysisData;
 import com.interviewcoach.resume.domain.repository.ResumeProfileRepository;
 import com.interviewcoach.resume.domain.repository.ResumeRepository;
+import com.interviewcoach.resume.application.service.ResumeProfileAnalysisStateService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -42,6 +43,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +63,7 @@ public class InterviewService {
     private final InterviewReportRepository reportRepository;
     private final ResumeRepository resumeRepository;
     private final ResumeProfileRepository resumeProfileRepository;
+    private final ResumeProfileAnalysisStateService resumeProfileAnalysisStateService;
     private final PositionRepository positionRepository;
     private final PositionProfileRepository positionProfileRepository;
     private final ReportAgent reportAgent;
@@ -69,7 +72,7 @@ public class InterviewService {
     private final ObjectMapper objectMapper;
 
     /**
-     * 创建面试。
+     * 使用当前正式事实画像创建面试并固定快照；当前可用的 AI 分析一并快照，缺失时不阻断。
      */
     @Transactional
     public CreateInterviewResponse createInterview(Long userId, CreateInterviewRequest request) {
@@ -81,9 +84,6 @@ public class InterviewService {
 
         Resume resume = resumeRepository.findByIdAndUserId(request.getResumeId(), userId)
                 .orElseThrow(() -> new BusinessException(RESUME_NOT_FOUND.getCode(), "简历不存在"));
-        if (resume.getParseStatus() != ResumeParseStatus.CONFIRMED) {
-            throw new BusinessException(RESUME_STATUS_INVALID.getCode(), "简历未确认");
-        }
         if (resume.isLocked() && !isInterviewActive(resume.getLockInterviewId())) {
             resume.setLockInterviewId(null);
         }
@@ -91,20 +91,26 @@ public class InterviewService {
             throw new BusinessException(RESUME_LOCKED.getCode(), "简历已锁定在其他面试");
         }
 
-        Position position = positionRepository.findByIdAndUserId(request.getPositionId(), userId)
+        Position position = positionRepository.findAccessibleById(
+                        request.getPositionId(), userId, PositionAuditStatus.APPROVED)
                 .orElseThrow(() -> new BusinessException(POSITION_NOT_FOUND.getCode(), "岗位不存在"));
+        boolean ownsPosition = Objects.equals(position.getUserId(), userId);
         // MVP 阶段：岗位画像已确认即可用于面试，无需独立管理员审核
         if (position.getParseStatus() != PositionParseStatus.CONFIRMED) {
             throw new BusinessException(POSITION_STATUS_INVALID.getCode(), "岗位未就绪");
         }
-        if (position.isLocked() && !isInterviewActive(position.getLockInterviewId())) {
-            position.setLockInterviewId(null);
-        }
-        if (position.isLocked()) {
-            throw new BusinessException(POSITION_LOCKED.getCode(), "岗位已锁定在其他面试");
+        if (ownsPosition) {
+            if (position.isLocked() && !isInterviewActive(position.getLockInterviewId())) {
+                position.setLockInterviewId(null);
+            }
+            if (position.isLocked()) {
+                throw new BusinessException(POSITION_LOCKED.getCode(), "岗位已锁定在其他面试");
+            }
         }
 
-        UserProfileData userProfile = loadUserProfile(resume.getId());
+        // 面试资格以正式画像是否存在为准；重新解析期间保留的正式画像仍可继续用于面试。
+        UserProfileData userProfile = loadUserProfile(userId, resume.getId());
+        ResumeProfileAnalysisData userProfileAnalysis = loadUserProfileAnalysis(userId, resume.getId());
         PositionProfileData positionProfile = loadPositionProfile(position.getId());
 
         Interview interview = new Interview();
@@ -112,6 +118,8 @@ public class InterviewService {
         interview.setResumeId(resume.getId());
         interview.setPositionId(position.getId());
         interview.setUserProfileSnapshot(toJson(userProfile));
+        interview.setUserProfileAnalysisSnapshot(
+                userProfileAnalysis == null ? null : toJson(userProfileAnalysis));
         interview.setPositionProfileSnapshot(toJson(positionProfile));
         interview.setSelectedPhases(toJson(selectedPhases.stream().map(InterviewPhase::name).toList()));
         interview.setCurrentPhase(selectedPhases.get(0));
@@ -120,13 +128,16 @@ public class InterviewService {
         interview.setCurrentPhaseQuestionCount(0);
         interviewRepository.save(interview);
 
-        // 锁定简历和岗位
+        // 简历始终归当前用户独占；共享公共岗位作为模板只读复用，不写入全局锁。
         resume.setLockInterviewId(interview.getId());
         resumeRepository.save(resume);
-        position.setLockInterviewId(interview.getId());
-        positionRepository.save(position);
+        if (ownsPosition) {
+            position.setLockInterviewId(interview.getId());
+            positionRepository.save(position);
+        }
 
-        InterviewContext context = coordinatorAgent.initialize(interview, userProfile, positionProfile);
+        InterviewContext context = coordinatorAgent.initialize(
+                interview, userProfile, userProfileAnalysis, positionProfile);
         String firstQuestion = coordinatorAgent.generateFirstQuestion(context);
 
         // 保存首题
@@ -167,7 +178,8 @@ public class InterviewService {
     }
 
     /**
-     * 处理回答并返回下一题（非流式内部方法，由 Controller 包装 SSE）。
+     * 使用创建面试时固定的事实和可选分析快照处理回答，避免后续画像变化影响本场面试。
+     * 该方法为非流式内部方法，由 Controller 包装 SSE。
      */
     @Transactional
     public TurnResult submitAnswer(Long userId, Long interviewId, String answer) {
@@ -187,8 +199,11 @@ public class InterviewService {
         }
 
         UserProfileData userProfile = parseJson(interview.getUserProfileSnapshot(), UserProfileData.class);
+        ResumeProfileAnalysisData userProfileAnalysis = parseJson(
+                interview.getUserProfileAnalysisSnapshot(), ResumeProfileAnalysisData.class);
         PositionProfileData positionProfile = parseJson(interview.getPositionProfileSnapshot(), PositionProfileData.class);
-        InterviewContext context = coordinatorAgent.initialize(interview, userProfile, positionProfile);
+        InterviewContext context = coordinatorAgent.initialize(
+                interview, userProfile, userProfileAnalysis, positionProfile);
         syncContext(context, interview);
 
         // 获取上一轮问题
@@ -321,8 +336,7 @@ public class InterviewService {
         // 3. 脱敏：隐去公司信息、候选人姓名等敏感内容
         Position position = positionRepository.findById(interview.getPositionId()).orElse(null);
         String companyName = position != null ? position.getCompanyName() : null;
-        String candidateName = extractCandidateName(interview.getUserProfileSnapshot());
-        InterviewReportResponse desensitized = reportDesensitizer.desensitize(report, companyName, candidateName);
+        InterviewReportResponse desensitized = reportDesensitizer.desensitize(report, companyName, null);
 
         // 4. 保存并返回
         InterviewReport entity = toReportEntity(userId, interviewId, desensitized);
@@ -412,10 +426,17 @@ public class InterviewService {
         }
     }
 
-    private UserProfileData loadUserProfile(Long resumeId) {
-        ResumeProfile profile = resumeProfileRepository.findByResumeId(resumeId)
+    private UserProfileData loadUserProfile(Long userId, Long resumeId) {
+        ResumeProfile profile = resumeProfileRepository.findByResumeIdAndUserId(resumeId, userId)
                 .orElseThrow(() -> new BusinessException(RESUME_NOT_FOUND.getCode(), "简历画像不存在"));
         return parseJson(profile.getProfileData(), UserProfileData.class);
+    }
+
+    private ResumeProfileAnalysisData loadUserProfileAnalysis(Long userId, Long resumeId) {
+        return resumeProfileAnalysisStateService.loadCurrent(resumeId, userId)
+                .filter(ResumeProfileAnalysisStateService.AnalysisView::usableForInterview)
+                .map(ResumeProfileAnalysisStateService.AnalysisView::data)
+                .orElse(null);
     }
 
     private PositionProfileData loadPositionProfile(Long positionId) {
@@ -669,14 +690,4 @@ public class InterviewService {
         return entity;
     }
 
-    /**
-     * 从用户画像快照中提取候选人姓名。
-     */
-    private String extractCandidateName(String userProfileSnapshot) {
-        UserProfileData profile = parseJson(userProfileSnapshot, UserProfileData.class);
-        if (profile == null || profile.getBasicInfo() == null) {
-            return null;
-        }
-        return profile.getBasicInfo().getName();
-    }
 }

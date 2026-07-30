@@ -49,6 +49,16 @@ public interface PositionRepository extends JpaRepository<Position, Long> {
     Optional<Position> findByIdAndUserId(Long id, Long userId);
 
     /**
+     * 查询当前用户可用于面试的指定岗位：本人岗位，或已审核通过的公共岗位。
+     */
+    @Query("SELECT p FROM Position p WHERE p.id = :id AND (p.userId = :userId "
+            + "OR (p.isPublic = true AND p.auditStatus = :approvedStatus))")
+    Optional<Position> findAccessibleById(
+            @Param("id") Long id,
+            @Param("userId") Long userId,
+            @Param("approvedStatus") com.interviewcoach.position.domain.entity.PositionAuditStatus approvedStatus);
+
+    /**
      * 查询公共岗位列表（已审核通过）。
      */
     Page<Position> findByIsPublicTrueAndAuditStatus(

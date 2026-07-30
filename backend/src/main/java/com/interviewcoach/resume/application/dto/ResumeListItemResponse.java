@@ -15,6 +15,8 @@ public class ResumeListItemResponse {
     private String statusLabel;
     private String jobCategory;
     private String jobCategoryLabel;
+    private Boolean hasConfirmedProfile;
+    private String parseErrorMessage;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

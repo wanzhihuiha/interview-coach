@@ -3,6 +3,7 @@ package com.interviewcoach.interview.domain.model;
 import com.interviewcoach.interview.domain.entity.InterviewPhase;
 import com.interviewcoach.position.domain.model.PositionProfileData;
 import com.interviewcoach.resume.domain.model.UserProfileData;
+import com.interviewcoach.resume.domain.model.ResumeProfileAnalysisData;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Data;
@@ -16,6 +17,7 @@ public class InterviewContext {
     private Long interviewId;
     private Long userId;
     private UserProfileData userProfile;
+    private ResumeProfileAnalysisData userProfileAnalysis;
     private PositionProfileData positionProfile;
 
     /**

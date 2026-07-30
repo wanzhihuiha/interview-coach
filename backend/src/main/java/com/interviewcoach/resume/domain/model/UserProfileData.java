@@ -5,7 +5,7 @@ import java.util.Map;
 import lombok.Data;
 
 /**
- * 用户画像数据模型。
+ * 简历可核对事实数据，不包含姓名、年龄、性别或模型推断结论。
  */
 @Data
 public class UserProfileData {
@@ -15,16 +15,9 @@ public class UserProfileData {
     private Map<String, String> skillLevel;
     private List<ProjectExperience> projectExperience;
     private List<WorkExperience> workExperience;
-    private List<String> strengths;
-    private List<String> weaknesses;
-    private Double confidenceLevel;
-    private String experienceLevel;
 
     @Data
     public static class BasicInfo {
-        private String name;
-        private String age;
-        private String gender;
         private String workingYears;
         private String currentPosition;
         private String education;
@@ -47,7 +40,7 @@ public class UserProfileData {
     }
 
     /**
-     * 创建空画像，用于 LLM 解析失败时的降级。
+     * 创建字段结构完整的空事实数据，便于表单和测试按需填充。
      */
     public static UserProfileData empty() {
         UserProfileData data = new UserProfileData();
@@ -56,9 +49,6 @@ public class UserProfileData {
         data.setSkillLevel(Map.of());
         data.setProjectExperience(List.of());
         data.setWorkExperience(List.of());
-        data.setStrengths(List.of());
-        data.setWeaknesses(List.of());
-        data.setConfidenceLevel(0.0);
         return data;
     }
 }

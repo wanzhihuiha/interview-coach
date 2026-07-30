@@ -13,7 +13,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * 简历画像实体，对应数据库 resume_profile 表。
+ * 用户已确认的简历事实画像，对应数据库 resume_profile 表。
  */
 @Entity
 @Table(name = "resume_profile")
@@ -36,6 +36,15 @@ public class ResumeProfile {
 
     @Column(name = "experience_level", length = 20)
     private String experienceLevel;
+
+    @Column(name = "profile_hash", length = 64)
+    private String profileHash;
+
+    @Column(name = "schema_version", nullable = false)
+    private Integer schemaVersion = 2;
+
+    @Column(name = "confirmed_at")
+    private LocalDateTime confirmedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
