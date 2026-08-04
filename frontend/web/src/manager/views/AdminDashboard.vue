@@ -12,8 +12,8 @@
     <el-row :gutter="16">
       <el-col :span="6">
         <el-card>
-          <div class="stat-title">待审核岗位</div>
-          <div class="stat-value">{{ stats.pendingPositions }}</div>
+          <div class="stat-title">公共岗位待确认</div>
+          <div class="stat-value">{{ stats.pendingPublicPositions }}</div>
         </el-card>
       </el-col>
       <el-col :span="6">
@@ -45,7 +45,7 @@
         <p>按当前优先级进入运营与审核任务。</p>
       </div>
       <div class="quick-links">
-        <el-button type="primary" :icon="OfficeBuilding" @click="$router.push('/admin/positions')">岗位审核</el-button>
+        <el-button type="primary" :icon="OfficeBuilding" @click="$router.push('/admin/positions')">公共岗位</el-button>
         <el-button :icon="Document" @click="$router.push('/admin/questions')">题目审核</el-button>
         <el-button :icon="User" @click="$router.push('/admin/users')">用户管理</el-button>
         <el-button :icon="Tickets" @click="$router.push('/admin/audit-logs')">审计日志</el-button>
@@ -62,7 +62,7 @@ import { getAdminDashboardStats } from '@/manager/api/admin'
 import type { AdminDashboardStats } from '@/manager/types'
 
 const stats = reactive<AdminDashboardStats>({
-  pendingPositions: 0,
+  pendingPublicPositions: 0,
   pendingQuestions: 0,
   totalUsers: 0,
   todayAudits: 0

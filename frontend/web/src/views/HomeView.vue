@@ -286,7 +286,7 @@ async function loadDashboard() {
 
   const [resumeResult, positionResult, historyResult] = await Promise.allSettled([
     getResumeList(),
-    getAccessiblePositionList({ size: 5 }),
+    getAccessiblePositionList({ page: 0, size: 5 }),
     getInterviewHistory()
   ])
 
@@ -294,7 +294,9 @@ async function loadDashboard() {
     resumes.value = resumeResult.value.slice(0, 2)
   }
   if (positionResult.status === 'fulfilled') {
-    positions.value = positionResult.value.slice(0, 5)
+    positions.value = positionResult.value.content
+      .filter(position => position.profileUsable && !position.archived)
+      .slice(0, 5)
   }
   if (historyResult.status === 'fulfilled') {
     recentInterviews.value = historyResult.value.slice(0, 3)

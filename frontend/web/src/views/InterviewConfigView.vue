@@ -168,7 +168,7 @@
                     </small>
                   </span>
                   <span class="choice-state">
-                    {{ position.isPublic ? '公共岗位' : (position.parseStatusLabel || '画像已确认') }}
+                    {{ position.isPublic ? '公共岗位' : '个人岗位' }}
                   </span>
                   <el-icon class="choice-check"><Check /></el-icon>
                 </el-radio>
@@ -331,7 +331,7 @@ import {
   VideoCamera
 } from '@element-plus/icons-vue'
 import AppLayout from '@/components/AppLayout.vue'
-import { getPositionList, getPublicPositionList, getResumeList, startInterview } from '@/api'
+import { getAccessiblePositionList, getResumeList, loadAllPositionPages, startInterview } from '@/api'
 import type { InterviewPhase, Position, Resume } from '@/types'
 
 type SetupStep = 1 | 2 | 3
@@ -398,11 +398,11 @@ const SHOWCASE_POSITIONS: Position[] = [
     levelLabel: '高级',
     location: '上海 · 浦东',
     salaryRange: '30-45K · 15薪',
-    parseStatus: 'CONFIRMED',
-    parseStatusLabel: '画像已确认',
-    auditStatus: 'APPROVED',
-    auditStatusLabel: '已通过',
-    isPublic: false
+    isPublic: false,
+    archived: false,
+    profileUsable: true,
+    canConfirm: false,
+    canRetry: true
   },
   {
     positionId: 9202,
@@ -414,11 +414,11 @@ const SHOWCASE_POSITIONS: Position[] = [
     levelLabel: '专家',
     location: '杭州 · 余杭',
     salaryRange: '40-60K · 16薪',
-    parseStatus: 'CONFIRMED',
-    parseStatusLabel: '画像已确认',
-    auditStatus: 'APPROVED',
-    auditStatusLabel: '已通过',
-    isPublic: true
+    isPublic: true,
+    archived: false,
+    profileUsable: true,
+    canConfirm: false,
+    canRetry: false
   },
   {
     positionId: 9203,
@@ -430,11 +430,11 @@ const SHOWCASE_POSITIONS: Position[] = [
     levelLabel: '专家',
     location: '深圳 · 南山',
     salaryRange: '45-65K · 15薪',
-    parseStatus: 'CONFIRMED',
-    parseStatusLabel: '画像已确认',
-    auditStatus: 'APPROVED',
-    auditStatusLabel: '已通过',
-    isPublic: true
+    isPublic: true,
+    archived: false,
+    profileUsable: true,
+    canConfirm: false,
+    canRetry: false
   },
   {
     positionId: 9204,
@@ -446,11 +446,11 @@ const SHOWCASE_POSITIONS: Position[] = [
     levelLabel: '高级',
     location: '北京 · 海淀',
     salaryRange: '35-50K · 14薪',
-    parseStatus: 'CONFIRMED',
-    parseStatusLabel: '画像已确认',
-    auditStatus: 'APPROVED',
-    auditStatusLabel: '已通过',
-    isPublic: true
+    isPublic: true,
+    archived: false,
+    profileUsable: true,
+    canConfirm: false,
+    canRetry: false
   }
 ]
 
@@ -610,15 +610,14 @@ async function loadConfigOptions() {
   loadError.value = ''
 
   try {
-    const [resumeList, ownPositions, publicPositions] = await Promise.all([
+    const [resumeList, accessiblePositions] = await Promise.all([
       getResumeList(),
-      getPositionList(),
-      getPublicPositionList()
+      loadAllPositionPages((page, size) => getAccessiblePositionList({ page, size }))
     ])
 
     const availableResumes = resumeList.filter(resume => resume.hasConfirmedProfile === true)
-    const availablePositions = mergePositions(ownPositions, publicPositions)
-      .filter(position => position.parseStatus === 'CONFIRMED')
+    const availablePositions = accessiblePositions
+      .filter(position => position.profileUsable && !position.archived)
 
     resumes.value = availableResumes
     positions.value = availablePositions
@@ -638,12 +637,6 @@ async function loadConfigOptions() {
   } finally {
     loading.value = false
   }
-}
-
-function mergePositions(own: Position[], publicList: Position[]): Position[] {
-  const ownIds = new Set(own.map(position => position.positionId))
-  const dedupedPublic = publicList.filter(position => !ownIds.has(position.positionId))
-  return [...own, ...dedupedPublic]
 }
 
 async function handleStart() {

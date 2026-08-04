@@ -18,9 +18,9 @@ export const managerRoutes: RouteRecordRaw = {
     },
     {
       path: 'positions',
-      name: 'AdminPositionAudit',
+      name: 'AdminPublicPositions',
       component: () => import('@/manager/views/PositionAuditView.vue'),
-      meta: { title: '岗位审核' }
+      meta: { title: '公共岗位' }
     },
     {
       path: 'questions',
