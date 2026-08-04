@@ -1,0 +1,1544 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mxfile host="app.diagrams.net" modified="2026-08-03T06:55:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="overview" name="一眼看懂-岗位解析生命周期">
+    <mxGraphModel fold="1" pageWidth="1600" dx="1600" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1000" dy="1000" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="overview-0" />
+        <mxCell id="overview-1" parent="overview-0" />
+        <mxCell id="overview-title" value="岗位上传与解析生命周期：改造后一眼看懂" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="overview-1">
+          <mxGeometry x="40" y="20" width="1520" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="overview-subtitle" value="请求只负责安全接收和创建任务；后台按用户公平排队；MySQL 保存最终事实，Redis 队列随时可重建。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="overview-1">
+          <mxGeometry x="40" y="64" width="1520" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-rq" value="请求内" style="swimlane;html=1;startSize=32;horizontal=0;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=14;fontStyle=1;fontColor=#334155;" vertex="1" parent="overview-1">
+          <mxGeometry x="40" y="120" width="1520" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-q" value="排队与调度" style="swimlane;html=1;startSize=32;horizontal=0;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=14;fontStyle=1;fontColor=#334155;" vertex="1" parent="overview-1">
+          <mxGeometry x="40" y="330" width="1520" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-w" value="后台执行与确认" style="swimlane;html=1;startSize=32;horizontal=0;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=14;fontStyle=1;fontColor=#334155;" vertex="1" parent="overview-1">
+          <mxGeometry x="40" y="540" width="1520" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n1" value="&lt;b&gt;1. 用户提交岗位&lt;/b&gt;&lt;br&gt;粘贴 JD 或上传 PDF / TXT" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="120" y="172" width="250" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n2" value="&lt;b&gt;2. 安全提取与校验&lt;/b&gt;&lt;br&gt;真实类型、资源上限、最多 2000 字&lt;br&gt;请求结束前清理临时资源" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="500" y="162" width="280" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n3" value="&lt;b&gt;3. 一个短事务写入 MySQL&lt;/b&gt;&lt;br&gt;个人或公共岗位 + WAITING 当前任务&lt;br&gt;taskId 同时作为参与者内固定排序号" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="920" y="162" width="300" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n4" value="&lt;b&gt;4. 不同参与者轮流排队&lt;/b&gt;&lt;br&gt;个人用户各自一队，全部公共任务共用 PUBLIC&lt;br&gt;每轮只取该参与者最早的 WAITING" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="250" y="372" width="300" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n5" value="&lt;b&gt;5. 先取得本机解析容量&lt;/b&gt;&lt;br&gt;没有空位就继续排队，不取 Redis、不访问数据库&lt;br&gt;有空位才尝试预留和领取任务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="700" y="372" width="300" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n6" value="&lt;b&gt;6. 数据库再次确认任务仍可执行&lt;/b&gt;&lt;br&gt;只把有效的“等待中”任务改成“解析中”&lt;br&gt;同一用户最多运行一个任务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="1150" y="372" width="300" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n7" value="&lt;b&gt;7. 事务外调用 CPA 并校验结果&lt;/b&gt;&lt;br&gt;合法画像保存为 SUCCEEDED 候选；异常写 FAILED&lt;br&gt;不生成基础兜底画像，远程等待不占数据库事务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="330" y="582" width="330" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-n8" value="&lt;b&gt;8. 所有者或管理员确认后才发布&lt;/b&gt;&lt;br&gt;确认写正式画像并删除当前任务；公共岗位立即公开&lt;br&gt;失败时可重试，旧正式画像始终保持可用" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="overview-1">
+          <mxGeometry x="920" y="582" width="350" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="overview-1" source="ov-n1" target="ov-n2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-e23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="overview-1" source="ov-n2" target="ov-n3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-e34" value="事务提交后尝试入队" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="overview-1" source="ov-n3" target="ov-n4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1070" y="300" />
+              <mxPoint x="400" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ov-e45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="overview-1" source="ov-n4" target="ov-n5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-e56" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="overview-1" source="ov-n5" target="ov-n6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-e67" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="overview-1" source="ov-n6" target="ov-n7">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1300" y="510" />
+              <mxPoint x="495" y="510" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ov-e78" value="成功：等待用户确认" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="overview-1" source="ov-n7" target="ov-n8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-truth" value="&lt;b&gt;为什么 Redis 队列丢了也不会丢任务&lt;/b&gt;&lt;br&gt;MySQL 保存当前任务真实状态；Redis 只保存可重建投影。应用启动时收口遗留 RUNNING，再按 taskId 恢复有效 WAITING；当前实现不持续扫描数据库，运行中投影失败依赖告警和下次启动重建。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="overview-1">
+          <mxGeometry x="80" y="770" width="700" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-ui" value="&lt;b&gt;页面必须同时显示两件事&lt;/b&gt;&lt;br&gt;正式画像是否可用（profileUsable）：决定能否继续面试。&lt;br&gt;当前任务状态（latestTaskStatus）：WAITING、RUNNING、SUCCEEDED 或 FAILED。&lt;br&gt;仅 WAITING/RUNNING 持续轮询；隐藏暂停、可见恢复、卸载取消，不设 60 秒总上限。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="overview-1">
+          <mxGeometry x="820" y="770" width="700" height="112" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-nt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="overview-1" source="ov-truth" target="ov-n4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-nu" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="overview-1" source="ov-ui" target="ov-n8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ov-legend" value="颜色：蓝色＝主流程　绿色＝成功/可用　红色＝拒绝/失败　紫色＝事务与最终写入　灰色＝恢复、说明和异步补偿" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#6b7280;" vertex="1" parent="overview-1">
+          <mxGeometry x="140" y="920" width="1320" height="28" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="gap" name="现状和目标差距">
+    <mxGraphModel fold="1" pageWidth="1600" dx="1600" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1000" dy="1000" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="gap-0" />
+        <mxCell id="gap-1" parent="gap-0" />
+        <mxCell id="gap-title" value="为什么要改：现状行为与目标行为逐项对照" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="gap-1">
+          <mxGeometry x="40" y="20" width="1520" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="gap-subtitle" value="左侧是改造前问题；右侧是当前已落地设计。中间箭头表示本 Goal 完成的行为切换。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="gap-1">
+          <mxGeometry x="40" y="64" width="1520" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="g-lh" value="当前问题" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="90" y="115" width="560" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="g-rh" value="目标设计" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="950" y="115" width="560" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="g-l0" value="&lt;b&gt;创建请求实际一直等模型回答&lt;/b&gt;&lt;br&gt;同一个服务内部直接调用“异步方法”，Spring 没有机会切到后台执行；所以接口迟迟不返回，前端按钮一直转圈。（代码表现：同类调用 @Async）" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="90" y="195" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-r0" value="&lt;b&gt;请求只做到“任务已创建”&lt;/b&gt;&lt;br&gt;安全提取和事务成功后立即返回；后台调度器独立执行，不依赖同类 @Async。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="950" y="195" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-e0" value="改造" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="gap-1" source="g-l0" target="g-r0">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="g-l1" value="&lt;b&gt;原文件永久落盘但无人使用&lt;/b&gt;&lt;br&gt;保存路径未持久化；删除岗位也不删文件，长期运行会持续占满磁盘。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="90" y="310" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-r1" value="&lt;b&gt;只保存受限的 JD 文本&lt;/b&gt;&lt;br&gt;文件仅在上传请求内用于提取；临时资源 finally 清理，不再保存长期文件路径。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="950" y="310" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-e1" value="改造" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="gap-1" source="g-l1" target="g-r1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="g-l2" value="&lt;b&gt;一个 parseStatus 承担两种含义&lt;/b&gt;&lt;br&gt;重新解析时无法表达“旧正式画像仍可用，但新任务正在运行”。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="90" y="425" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-r2" value="&lt;b&gt;拆开正式画像与最新任务&lt;/b&gt;&lt;br&gt;profileUsable 表示能否面试；latestTaskStatus 单独表示本轮状态。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="950" y="425" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-e2" value="改造" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="gap-1" source="g-l2" target="g-r2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="g-l3" value="&lt;b&gt;没有持久任务与公平顺序&lt;/b&gt;&lt;br&gt;进程崩溃会丢失执行；直接限制两个线程会让后来用户随机失败或长期等待。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="90" y="540" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-r3" value="&lt;b&gt;数据库保存任务，Redis 只负责轮流叫号&lt;/b&gt;&lt;br&gt;Redis 丢失后任务仍在；同一用户一次只运行一个任务，不同用户按轮次各取一个。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="950" y="540" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-e3" value="改造" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="gap-1" source="g-l3" target="g-r3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="g-l4" value="&lt;b&gt;超时与并发名额没有闭环&lt;/b&gt;&lt;br&gt;把工作扔到后台，仍可能变成后台线程永久等待；名额也可能过早释放。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="90" y="655" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-r4" value="&lt;b&gt;容量与远程调用真实生命周期绑定&lt;/b&gt;&lt;br&gt;岗位模块不自建 deadlineAt；依赖共享 CPA/LLM 最终上限。底层调用、状态收口和清理真正结束后才释放本机执行名额。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="950" y="655" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-e4" value="改造" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="gap-1" source="g-l4" target="g-r4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="g-l5" value="&lt;b&gt;页面固定轮询约 60 秒&lt;/b&gt;&lt;br&gt;长回答尚未结束时页面停止刷新，用户不知道排队、失败还是卡死。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="90" y="770" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-r5" value="&lt;b&gt;可解释的等待、终态与重试&lt;/b&gt;&lt;br&gt;显示前方等待量快照；持续轮询到 SUCCEEDED/FAILED，失败原因分类后允许重新解析。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="gap-1">
+          <mxGeometry x="950" y="770" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="g-e5" value="改造" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="gap-1" source="g-l5" target="g-r5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="g-scope" value="&lt;b&gt;本图范围&lt;/b&gt;：当前确定单实例运行；岗位解析必须优先并使用独立 CPA 容量。CPA 多账户/多 Key 由其他负责人设计，本图只依赖可配置的“获取/释放容量”接口；多实例租约仅预留扩展点。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="gap-1">
+          <mxGeometry x="190" y="900" width="1220" height="58" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="create" name="详细设计-创建岗位与入队">
+    <mxGraphModel fold="1" pageWidth="1800" dx="1800" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1400" dy="1400" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="create-0" />
+        <mxCell id="create-1" parent="create-0" />
+        <mxCell id="create-title" value="详细设计：创建岗位与可靠入队" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="create-1">
+          <mxGeometry x="40" y="20" width="1720" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="create-subtitle" value="失败上传不占额度；成功请求只承诺 MySQL 已有任务；Redis 入队失败不能造成任务丢失。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="create-1">
+          <mxGeometry x="40" y="64" width="1720" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-guide" value="&lt;b&gt;本页怎么读&lt;/b&gt;&lt;br&gt;输入：岗位名称 + 已校验的 JD 文本。&lt;br&gt;成功口径：数据库同时保存岗位和唯一 WAITING 当前任务，然后立即返回。&lt;br&gt;个人失败事务不消耗 5 分钟频控；公共岗位走管理员独立入口。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="create-1">
+          <mxGeometry x="40" y="110" width="500" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-s" value="创建或上传岗位请求" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="create-1">
+          <mxGeometry x="760" y="110" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-auth" value="&lt;b&gt;由服务端入口固定资源类型和归属&lt;/b&gt;&lt;br&gt;普通入口创建本人个人岗位；ADMIN 入口创建公共岗位&lt;br&gt;客户端不能传 ownerId / isPublic 改变归属" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="create-1">
+          <mxGeometry x="650" y="205" width="480" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-input" value="&lt;b&gt;校验岗位名称和 JD 文本&lt;/b&gt;&lt;br&gt;粘贴文本或文件提取结果都必须为 1～2000 个完整字符（Unicode code point）" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="create-1">
+          <mxGeometry x="650" y="310" width="480" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-lock" value="&lt;b&gt;按资源类型进入并发保护&lt;/b&gt;&lt;br&gt;个人：事务第一条读取锁 sys_user 行&lt;br&gt;公共：事务外先取得固定 Redisson PUBLIC 提交锁" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="create-1">
+          <mxGeometry x="650" y="415" width="480" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-check" value="&lt;b&gt;在数据库短事务中核对限制&lt;/b&gt;&lt;br&gt;个人新建：未归档岗位 &amp;lt; 5、WAITING &amp;lt; 5、距上次成功发起已满 5 分钟&lt;br&gt;公共：PUBLIC 的 WAITING &amp;lt; 配置上限（默认 20）" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="create-1">
+          <mxGeometry x="620" y="520" width="540" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-ok" value="四条规则都满足？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="create-1">
+          <mxGeometry x="800" y="650" width="180" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-write" value="&lt;b&gt;一次提交同时保存岗位和当前任务&lt;/b&gt;&lt;br&gt;个人或公共活动岗位；唯一 WAITING 任务；服务端 queueOwner&lt;br&gt;任务自增 id 同时作为参与者内部固定排序号" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="create-1">
+          <mxGeometry x="610" y="775" width="560" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-commit" value="提交数据库事务并释放用户短锁&lt;br&gt;此刻创建请求已经成功" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="create-1">
+          <mxGeometry x="700" y="900" width="380" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-return" value="&lt;b&gt;立即返回：解析任务已受理&lt;/b&gt;&lt;br&gt;positionId、positionName、taskId&lt;br&gt;latestTaskStatus = WAITING" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="create-1">
+          <mxGeometry x="620" y="1010" width="540" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-invalid" value="POSITION_NAME_EMPTY / JD_CONTENT_EMPTY&lt;br&gt;JD_CONTENT_TOO_LONG / PROFILE_DATA_INVALID&lt;br&gt;不创建岗位，不计入 5 分钟频控" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="create-1">
+          <mxGeometry x="80" y="305" width="430" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-busy" value="POSITION_PUBLIC_SUBMISSION_BUSY&lt;br&gt;公共提交锁不可用或未取得，失败关闭&lt;br&gt;个人提交由数据库用户行锁串行化" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="create-1">
+          <mxGeometry x="80" y="410" width="430" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-reject" value="POSITION_LIMIT_EXCEEDED：个人未归档岗位已满&lt;br&gt;POSITION_WAITING_LIMIT_EXCEEDED：参与者等待任务已满&lt;br&gt;POSITION_SUBMISSION_TOO_FREQUENT：个人 5 分钟频控未到" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="create-1">
+          <mxGeometry x="55" y="640" width="500" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-db-error" value="事务异常：由统一异常处理返回&lt;br&gt;整体回滚，不产生孤立岗位或任务&lt;br&gt;不虚构额外岗位业务错误码" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="create-1">
+          <mxGeometry x="80" y="790" width="430" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-enqueue" value="&lt;b&gt;后台动作，不阻塞左侧返回&lt;/b&gt;&lt;br&gt;把任务幂等加入该用户的先进先出队列；该用户没有运行中任务且尚未参加轮转时，才把用户放到轮转队尾" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="create-1">
+          <mxGeometry x="1220" y="885" width="500" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-repair" value="Redis 写入失败也不回滚岗位&lt;br&gt;MySQL 中的 WAITING 仍有效；有限重试耗尽后记录告警&lt;br&gt;当前实现依赖下次应用启动按 taskId 重建，不持续扫描数据库" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="create-1">
+          <mxGeometry x="1220" y="1015" width="500" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-idem" value="&lt;b&gt;为什么并发提交不能穿透限制&lt;/b&gt;&lt;br&gt;个人先锁 sys_user 行，串行检查岗位数、等待数和频控；公共用固定 PUBLIC 提交锁串行检查等待数；position_id 唯一约束最终保证一岗位一任务。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="create-1">
+          <mxGeometry x="1190" y="405" width="510" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-s" target="ce-auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-auth" target="ce-input">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e3" value="通过" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-input" target="ce-lock">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e3x" value="失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="create-1" source="ce-input" target="ce-invalid">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e4" value="取得" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-lock" target="ce-check">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e4x" value="未取得" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="create-1" source="ce-lock" target="ce-busy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-check" target="ce-ok">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e6" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-ok" target="ce-write">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e6x" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="create-1" source="ce-ok" target="ce-reject">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-write" target="ce-commit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e7x" value="异常" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="create-1" source="ce-write" target="ce-db-error">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e8" value="立即响应" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-commit" target="ce-return">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e9" value="提交成功后触发" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=1 3;strokeColor=#111827;strokeWidth=2;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="create-1" source="ce-commit" target="ce-enqueue">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-e10" value="告警；下次启动重建" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=1 3;strokeColor=#111827;strokeWidth=2;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="create-1" source="ce-enqueue" target="ce-repair">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=1 3;strokeColor=#111827;strokeWidth=2;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="create-1" source="ce-lock" target="ce-idem">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-rate" value="&lt;b&gt;5 分钟限频从什么时候开始算&lt;/b&gt;：只有数据库事务成功提交才算一次“成功发起”。文件校验失败、提取失败或事务回滚都不消耗限频；新建和重新解析共用同一时间。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="create-1">
+          <mxGeometry x="240" y="1160" width="1320" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="ce-config" value="&lt;b&gt;当前不启用“预计等太久就拒绝提交”&lt;/b&gt;：先用每用户最多 5 个等待任务和 5 分钟限频控制积压；拿到真实吞吐量、P95/P99 等待时间和 CPA 容量数据后再评估是否开启。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="create-1">
+          <mxGeometry x="360" y="1270" width="1080" height="72" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="extract" name="详细设计-文件安全提取">
+    <mxGraphModel fold="1" pageWidth="2200" dx="2200" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1580" dy="1580" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="extract-0" />
+        <mxCell id="extract-1" parent="extract-0" />
+        <mxCell id="extract-title" value="详细设计：PDF / TXT 文件安全提取" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="extract-1">
+          <mxGeometry x="40" y="20" width="2120" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="extract-subtitle" value="后端只接收受限的 PDF / TXT，提取出最多 2000 个完整字符；原文件和临时路径都不长期保存。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="extract-1">
+          <mxGeometry x="40" y="64" width="2120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-guide" value="&lt;b&gt;本页怎么读&lt;/b&gt;&lt;br&gt;前端校验只用于尽早提示，不能替代后端判断。&lt;br&gt;后端重新检查实际字节数、内容特征、编码、PDF 页数、字符数和提取超时。&lt;br&gt;无论成功还是失败，都会关闭资源并尝试删除临时文件。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="extract-1">
+          <mxGeometry x="40" y="110" width="520" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-s" value="用户在前端选择 PDF 或 TXT" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="extract-1">
+          <mxGeometry x="970" y="110" width="260" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-front" value="&lt;b&gt;前端先做快速提示&lt;/b&gt;&lt;br&gt;检查扩展名和浏览器可见大小；能在本地取得文本时，再预检查是否为 1～2000 个完整字符" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="860" y="205" width="480" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-upload" value="按 multipart/form-data 上传文件&lt;br&gt;后端从头执行权威校验" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="890" y="320" width="420" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-size" value="&lt;b&gt;边读取边检查实际文件大小&lt;/b&gt;&lt;br&gt;请求头中的 Content-Length 只用于提前拒绝；实际读取字节达到配置上限时立即停止" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="840" y="415" width="520" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-temp" value="&lt;b&gt;写入非持久临时目录&lt;/b&gt;&lt;br&gt;服务端生成随机文件名；客户端文件名不能控制保存路径；同时明确由谁负责删除" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="840" y="535" width="520" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-mime" value="&lt;b&gt;根据文件头和内容识别真实格式&lt;/b&gt;&lt;br&gt;扩展名、浏览器 Content-Type 和 fileType 只作提示，不能作为最终依据" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="840" y="655" width="520" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-supported" value="真实格式受支持&lt;br&gt;且与声明一致？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="extract-1">
+          <mxGeometry x="1000" y="770" width="200" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-type" value="识别为哪种格式？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="extract-1">
+          <mxGeometry x="1010" y="900" width="180" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-txt" value="&lt;b&gt;TXT：逐块严格解码&lt;/b&gt;&lt;br&gt;只接受 UTF-8；拒绝非法字节、NUL 和明显二进制内容；读到第 2001 个完整字符立即停止" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="430" y="900" width="450" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-pdf" value="&lt;b&gt;PDF：在独立有界任务中提取&lt;/b&gt;&lt;br&gt;检查前 1024 字节签名，拒绝加密文件；限制 20 页、并发和请求等待超时&lt;br&gt;规范化后超过 2000 个完整字符即失败" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="1320" y="900" width="450" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-normal" value="&lt;b&gt;统一整理提取后的文本&lt;/b&gt;&lt;br&gt;去除 BOM、统一换行、清理首尾空白，再按用户看到的完整字符（Unicode code point）重新计数" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="850" y="1080" width="500" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-length" value="最终文本为 1～2000 字？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="extract-1">
+          <mxGeometry x="985" y="1195" width="230" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-clean" value="&lt;b&gt;无条件关闭并清理本次提取资源&lt;/b&gt;&lt;br&gt;关闭 PDF/输入流，释放提取执行名额，删除临时文件；任何路径都必须经过清理" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="830" y="1320" width="540" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-ok" value="&lt;b&gt;清理完成，输出规范化 JD&lt;/b&gt;&lt;br&gt;进入“创建岗位与入队”流程&lt;br&gt;只传文本，不保存原文件或临时路径" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="extract-1">
+          <mxGeometry x="1480" y="1320" width="540" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-size" value="FILE_SIZE_EXCEEDED&lt;br&gt;实际上传数据超过配置上限&lt;br&gt;停止读取并删除已写入的临时内容" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="extract-1">
+          <mxGeometry x="80" y="415" width="500" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-type" value="FILE_TYPE_NOT_SUPPORTED：声明不是 PDF/TXT&lt;br&gt;FILE_CONTENT_INVALID：签名或实际内容不匹配&lt;br&gt;删除临时文件后结束" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="extract-1">
+          <mxGeometry x="80" y="772" width="520" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-txt" value="FILE_CONTENT_INVALID：非 UTF-8 或含二进制控制字符&lt;br&gt;FILE_EXTRACTION_TIMEOUT / JD_CONTENT_TOO_LONG&lt;br&gt;关闭流并删除临时文件后返回" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="extract-1">
+          <mxGeometry x="20" y="896" width="370" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-pdf" value="PDF_ENCRYPTED / PDF_PAGE_LIMIT_EXCEEDED&lt;br&gt;FILE_READ_FAILED / FILE_EXTRACTION_TIMEOUT&lt;br&gt;FILE_EXTRACTION_BUSY / JD_CONTENT_TOO_LONG&lt;br&gt;关闭 PDF 并删除临时文件后返回" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="extract-1">
+          <mxGeometry x="1810" y="892" width="370" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-text" value="JD_CONTENT_EMPTY / JD_CONTENT_TOO_LONG&lt;br&gt;规范化后为空或超过 2000 字&lt;br&gt;删除临时文件后结束" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="extract-1">
+          <mxGeometry x="80" y="1200" width="500" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-clean" value="临时文件删除未确认&lt;br&gt;当前实现只记录脱敏告警，不新增业务错误码&lt;br&gt;带固定前缀的孤儿文件由下次启动按年龄补偿清理" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="extract-1">
+          <mxGeometry x="200" y="1317" width="500" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-config" value="&lt;b&gt;上线前必须配置并压测&lt;/b&gt;&lt;br&gt;10 MiB 实际字节、PDF 20 页、2000 code point、15 秒请求等待、有界线程/队列和非持久临时目录。&lt;br&gt;网关/容器 multipart 上限必须与业务上限一致或更严格。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="extract-1">
+          <mxGeometry x="1510" y="390" width="620" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-owner" value="&lt;b&gt;临时文件只能有一个清理负责人&lt;/b&gt;&lt;br&gt;提取任务接手前由请求线程负责；接手后由提取任务在 finally 中负责。&lt;br&gt;请求超时只停止等待；Worker 真实结束后清理，异常遗留由下次启动清扫。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="extract-1">
+          <mxGeometry x="1510" y="515" width="620" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-s" target="fe-front"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-front" target="fe-upload"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-upload" target="fe-size"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-e3x" value="超过上限" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="extract-1" source="fe-size" target="fe-e-size"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-e4" value="未超限" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-size" target="fe-temp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-temp" target="fe-mime"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-mime" target="fe-supported"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-eu" value="不支持或不一致" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="extract-1" source="fe-supported" target="fe-e-type"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-es" value="通过" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-supported" target="fe-type"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-et" value="TXT" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="extract-1" source="fe-type" target="fe-txt"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-ep" value="PDF" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="extract-1" source="fe-type" target="fe-pdf"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-etx" value="提取失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="extract-1" source="fe-txt" target="fe-e-txt"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-epx" value="提取失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="extract-1" source="fe-pdf" target="fe-e-pdf"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-etn" value="提取成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="extract-1" source="fe-txt" target="fe-normal"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="655" y="1118" /></Array></mxGeometry></mxCell>
+        <mxCell id="fe-epn" value="提取成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="extract-1" source="fe-pdf" target="fe-normal"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1545" y="1118" /></Array></mxGeometry></mxCell>
+        <mxCell id="fe-enl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-normal" target="fe-length"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-elx" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="extract-1" source="fe-length" target="fe-e-text"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-elc" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="extract-1" source="fe-length" target="fe-clean"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-ecx" value="删除未确认：告警" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#d6b656;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="extract-1" source="fe-clean" target="fe-e-clean"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-eco" value="finally 已执行" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="extract-1" source="fe-clean" target="fe-ok"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-nc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=1 3;strokeColor=#111827;strokeWidth=2;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="extract-1" source="fe-size" target="fe-config"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-no" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=1 3;strokeColor=#111827;strokeWidth=2;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="extract-1" source="fe-temp" target="fe-owner"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="fe-bottom" value="所有读取、格式和提取错误都会经过唯一责任人的 finally 清理后返回；文本有效才进入创建事务。临时文件删除失败不会伪造新的任务状态，当前实现记录告警，并由下次启动按前缀和年龄补偿清理。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="extract-1">
+          <mxGeometry x="250" y="1470" width="1700" height="70" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="dispatch" name="详细设计-公平调度与领取">
+    <mxGraphModel fold="1" pageWidth="1900" dx="1900" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1700" dy="1700" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="dispatch-0" />
+        <mxCell id="dispatch-1" parent="dispatch-0" />
+        <mxCell id="dispatch-title" value="详细设计：公平调度与任务领取" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="40" y="20" width="1820" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatch-subtitle" value="不同用户轮流获得解析机会；同一用户一次只运行一个任务。CPA 没有空位时，任务继续排队，不创建线程也不占数据库连接。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="40" y="64" width="1820" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-db" value="&lt;b&gt;MySQL 任务事实：Redis 丢失也不会丢任务&lt;/b&gt;&lt;br&gt;每个岗位最多一条当前任务；保存 taskId、岗位/发起人、queueOwner、四状态、候选或失败信息及起止时间。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="50" y="120" width="430" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-redis" value="&lt;b&gt;Redis 公平排队投影：启动时可由 MySQL 重建&lt;/b&gt;&lt;br&gt;ready List + Set：参与者轮转且防重复&lt;br&gt;owner:{queueOwner}:tasks：按 taskId 排序的 ZSet&lt;br&gt;busy Hash：一个参与者同时最多运行一条" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="50" y="250" width="430" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-example" value="&lt;b&gt;轮转示例&lt;/b&gt;&lt;br&gt;A 有 A1/A2，B 有 B1，PUBLIC 有 P1/P2，可形成 A1 → B1 → P1 → A2 → P2。新参与者加入当时队尾；完成一轮且仍有任务的参与者也回到队尾。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="50" y="400" width="430" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-s" value="出现新任务、任务结束或执行名额释放&lt;br&gt;唤醒一次调度" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="780" y="115" width="250" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-permit" value="&lt;b&gt;先尝试占用一个岗位解析执行名额&lt;/b&gt;&lt;br&gt;立即得到“有空位/无空位”，不在这里等待（技术名：CPA permit）" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="700" y="235" width="410" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-dp" value="当前有空闲执行名额？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="805" y="355" width="200" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-wait" value="&lt;b&gt;没有空位：本轮立即结束&lt;/b&gt;&lt;br&gt;任务仍留在队列；名额释放时再次唤醒&lt;br&gt;不访问数据库，也不创建线程" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1240" y="360" width="350" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-reserve" value="&lt;b&gt;Redis 原子预留下一个参与者及其最早任务&lt;/b&gt;&lt;br&gt;Lua 从 ready 队首取 queueOwner、从其 ZSet 弹出最小 taskId，并写入 busy Hash，防止该参与者被重复领取" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="680" y="500" width="450" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-dc" value="选到有效用户和任务？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="805" y="630" width="200" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-empty" value="没有有效候选：释放刚占用的执行名额&lt;br&gt;顺手删除空用户或过期队列成员&lt;br&gt;本轮结束" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1240" y="635" width="350" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-claim" value="&lt;b&gt;MySQL 短事务：锁定 Position → 当前 Task 并正式领取&lt;/b&gt;&lt;br&gt;岗位存在且未归档、queueOwner 与岗位类型/所有者一致、当前 taskId 仍为 WAITING&lt;br&gt;条件更新为 RUNNING，记录 startedAt，并返回不可变 AnalysisInput" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="650" y="770" width="510" height="118" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-da" value="数据库成功把 1 条任务改为运行中？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="795" y="930" width="220" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-stale" value="&lt;b&gt;领取失败：按结果清理 Redis 预留&lt;/b&gt;&lt;br&gt;DB 异常未确认时 restore：放回 taskId 并结束 busy；任务无效时 finish：只结束 busy&lt;br&gt;随后释放本地容量；仍有任务才回到 ready 队尾" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1220" y="925" width="390" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-mark" value="&lt;b&gt;数据库领取成功：保留现有 Redis busy 预留&lt;/b&gt;&lt;br&gt;taskId 已在预留时从 ZSet 弹出；参与者在 Worker 真实结束前不回 ready&lt;br&gt;此处不依赖额外 Redis 写入，也没有运行中数据库补扫" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="665" y="1080" width="480" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-thread" value="&lt;b&gt;创建一个虚拟线程执行该任务&lt;/b&gt;&lt;br&gt;线程只接收任务 ID 和执行名额上下文；不携带数据库连接，CPA 调用发生在领取事务之外" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="680" y="1225" width="450" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-dt" value="创建成功？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="805" y="1360" width="200" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-threadx" value="&lt;b&gt;虚拟线程提交失败&lt;/b&gt;&lt;br&gt;把 RUNNING 收口为 FAILED&lt;br&gt;errorCode=WORKER_SUBMISSION_FAILED；数据库确认收口后结束 busy、释放容量并继续调度" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1210" y="1348" width="410" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-end" value="任务已交给后台执行&lt;br&gt;该用户本次任务结束前不再参与用户轮转" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="755" y="1510" width="300" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n1" value="&lt;b&gt;为什么必须先拿执行名额&lt;/b&gt;&lt;br&gt;没有 CPA 空位时不创建大量等待线程，也不会先把某个用户从轮转队列拿走后让他长时间占位。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1390" y="120" width="430" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n2" value="&lt;b&gt;taskId 与 ready 顺序各管一件事&lt;/b&gt;&lt;br&gt;taskId 同时作为参与者内部 FIFO 和启动恢复的稳定顺序；ready List 只表示当前运行时参与者的轮转先后。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1390" y="500" width="430" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n3" value="&lt;b&gt;正常调度不会不停扫描数据库&lt;/b&gt;&lt;br&gt;平时从 Redis 找下一位用户；选中任务后只去数据库核对并领取这一个任务，不查询“全系统下一个任务”。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1390" y="760" width="430" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n4" value="&lt;b&gt;当前并发边界是单应用实例&lt;/b&gt;&lt;br&gt;Semaphore、串行 dispatcher 和虚拟线程执行器都在本机；当前实现不提供多实例总并发或分布式执行租约。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="1390" y="1085" width="430" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-s" target="fd-permit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-permit" target="fd-dp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e2y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-dp" target="fd-reserve">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e2n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-dp" target="fd-wait">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-reserve" target="fd-dc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e3y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-dc" target="fd-claim">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e3n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-dc" target="fd-empty">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-claim" target="fd-da">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e4y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-da" target="fd-mark">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e4n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-da" target="fd-stale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-mark" target="fd-thread">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-thread" target="fd-dt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e6y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="dispatch-1" source="fd-dt" target="fd-end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-e6n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-dt" target="fd-threadx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n1e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-n1" target="fd-permit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n2e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-n2" target="fd-reserve">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n3e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-n3" target="fd-claim">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-n4e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="dispatch-1" source="fd-n4" target="fd-mark">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fd-ui" value="&lt;b&gt;queueAhead 只是当前快照&lt;/b&gt;：根据 busy 数、ready 位置和参与者内 taskId rank 估算。新参与者、归档、惰性清理或启动恢复都会让数字变化；Redis 不可用时该值可为空。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="dispatch-1">
+          <mxGeometry x="250" y="1610" width="1400" height="58" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="sequence" name="完整时序-CPA执行与结果写回">
+    <mxGraphModel fold="1" pageWidth="3200" dx="3200" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1900" dy="1900" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="sequence-0" />
+        <mxCell id="sequence-1" parent="sequence-0" />
+        <mxCell id="sequence-title" value="完整时序：CPA 执行、候选结果写回与容量释放" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="sequence-1">
+          <mxGeometry x="40" y="20" width="3120" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sequence-subtitle" value="MySQL 决定任务最终状态；等待模型回答时不占数据库事务。岗位模块不建立独立总 deadline，模型调用真实返回或抛错后才释放本地执行容量。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="sequence-1">
+          <mxGeometry x="40" y="64" width="3120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-rule" value="后台只保存 SUCCEEDED 候选；用户确认后写入正式画像并删除当前任务。任何模型异常、空响应、非法 JSON 或无效画像都写为 FAILED，不生成成功兜底画像。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="sequence-1">
+          <mxGeometry x="240" y="105" width="2280" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h1" value="公平调度器" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="80" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h1-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="200" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h2" value="Redis 调度投影" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="390" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h2-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="510" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h3" value="岗位解析执行名额 / CPA Permit" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="700" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h3-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="820" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h4" value="MySQL 任务 / 画像" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1010" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h4-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1130" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h5" value="后台解析任务 / 虚拟线程" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1320" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h5-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1440" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h6" value="JD Agent / LlmService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1630" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h6-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1750" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h7" value="Spring AI / CPA HTTP" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1940" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h7-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2060" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h8" value="CPA 主模型 / 备用模型" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2250" y="175" width="240" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-h8-line" value="" style="shape=line;direction=south;strokeColor=#94a3b8;dashed=1;dashPattern=4 4;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2370" y="233" width="1" height="1500" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-a" value="A 领取与交接" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#374151;" vertex="1" parent="sequence-1">
+          <mxGeometry x="20" y="250" width="170" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-m1" value="1. 尝试占用一个解析名额（tryAcquire）" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="290" as="sourcePoint" />
+            <mxPoint x="820" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m2" value="有空位 / 暂无空位（无空位时本轮结束）" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="820" y="330" as="sourcePoint" />
+            <mxPoint x="200" y="330" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m3" value="2. 原子选择下一位用户及其最早任务（Lua）" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="375" as="sourcePoint" />
+            <mxPoint x="510" y="375" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m4" value="返回用户 ID + 任务 ID / 当前无人等待" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="510" y="415" as="sourcePoint" />
+            <mxPoint x="200" y="415" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m5" value="3. 短事务锁定 Position → Task；核对后 WAITING → RUNNING，返回 AnalysisInput" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#9673a6;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="460" as="sourcePoint" />
+            <mxPoint x="1130" y="460" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m6" value="成功修改 1 条 / 未修改；返回后领取事务已经结束" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1130" y="505" as="sourcePoint" />
+            <mxPoint x="200" y="505" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m7" value="4. 领取成功：保留预留时写入的 busy；taskId 已从参与者 ZSet 弹出" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="550" as="sourcePoint" />
+            <mxPoint x="510" y="550" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m8" value="5. 提交虚拟线程；闭包携带 AnalysisInput 与 Redis Reservation，不传数据库连接" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="595" as="sourcePoint" />
+            <mxPoint x="1440" y="595" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-b" value="B 事务外执行模型调用" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#374151;" vertex="1" parent="sequence-1">
+          <mxGeometry x="20" y="635" width="200" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-deadline" value="岗位模块没有 deadlineAt 或独立倒计时；共享 LLM/HTTP 层的真实调用边界决定何时返回，返回前本地 permit 与 Redis busy 均保持占用" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9673a6;strokeWidth=2;dashed=1;dashPattern=6 4;fontSize=13;fontStyle=1;align=left;verticalAlign=top;spacing=6;" vertex="1" parent="sequence-1">
+          <mxGeometry x="1280" y="635" width="1130" height="585" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-m9" value="6. 虚拟线程开始执行已领取的不可变 AnalysisInput（含 JD、类别、taskId、queueOwner）" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="690" as="sourcePoint" />
+            <mxPoint x="1440" y="690" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m11" value="7. 校验 JD、构建提示词并调用 LlmService.chat" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1440" y="790" as="sourcePoint" />
+            <mxPoint x="1750" y="790" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m12" value="选择 L2 主模型并创建对应 ChatClient" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1750" y="835" as="sourcePoint" />
+            <mxPoint x="2060" y="835" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m13" value="主模型请求" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2060" y="880" as="sourcePoint" />
+            <mxPoint x="2370" y="880" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m14" value="响应或异常" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2370" y="925" as="sourcePoint" />
+            <mxPoint x="2060" y="925" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m15" value="Spring AI 调用真实返回或抛错" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2060" y="970" as="sourcePoint" />
+            <mxPoint x="1750" y="970" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m16" value="8. 主模型抛异常且备用配置不同：仅再调用一次备用模型" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1750" y="1015" as="sourcePoint" />
+            <mxPoint x="2060" y="1015" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m17" value="备用模型请求" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2060" y="1060" as="sourcePoint" />
+            <mxPoint x="2370" y="1060" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m18" value="备用响应或最终异常" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2370" y="1105" as="sourcePoint" />
+            <mxPoint x="1750" y="1105" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m19" value="提取 JSON 并严格校验画像；返回候选，或抛出可分类错误（不做成功降级）" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1750" y="1170" as="sourcePoint" />
+            <mxPoint x="1440" y="1170" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-c" value="C 短事务收口当前任务" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#374151;" vertex="1" parent="sequence-1">
+          <mxGeometry x="20" y="1240" width="190" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-m20" value="9. 锁定 Position → 当前 Task；只接受同一 taskId 且源状态仍为 RUNNING" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#9673a6;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1440" y="1290" as="sourcePoint" />
+            <mxPoint x="1130" y="1290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m21" value="候选有效：SUCCEEDED；任何分类失败：FAILED；岗位已归档：删除任务；任务已变化：不更新" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1130" y="1370" as="sourcePoint" />
+            <mxPoint x="1440" y="1370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-d" value="D 释放与下一轮" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#374151;" vertex="1" parent="sequence-1">
+          <mxGeometry x="20" y="1450" width="180" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-m22" value="10. 清除“该用户正在运行”标记；仍有等待任务时让用户回到轮转队尾" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1440" y="1500" as="sourcePoint" />
+            <mxPoint x="510" y="1500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m23" value="11. 释放本地解析名额（release）；此时模型调用与状态收口均已结束" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=13;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1440" y="1550" as="sourcePoint" />
+            <mxPoint x="820" y="1550" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m24" value="容量释放，唤醒下一轮" style="edgeStyle=none;rounded=0;html=1;strokeColor=#4b5563;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="820" y="1600" as="sourcePoint" />
+            <mxPoint x="200" y="1600" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-m25" value="通知调度器：当前任务在数据库中的结果已经落定" style="edgeStyle=none;rounded=0;html=1;strokeColor=#9ca3af;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="sequence-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1440" y="1650" as="sourcePoint" />
+            <mxPoint x="200" y="1650" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sq-n1" value="&lt;b&gt;领取阶段的 3 个失败出口&lt;/b&gt;&lt;br&gt;没有 permit：任务继续排队。DB 未确认：恢复 Redis 预留并稍后重试。虚拟线程提交失败：任务写 FAILED；若数据库无法确认收口则保留 busy 等下次启动恢复。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2660" y="250" width="470" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-n2" value="&lt;b&gt;数据库只在两个短时间点参与&lt;/b&gt;&lt;br&gt;第一次只负责领取任务，第二次只负责保存最终结果。等待 CPA 回答的几分钟内，不占数据库事务和连接。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2660" y="430" width="470" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-n3" value="&lt;b&gt;岗位模块不承诺单独的总超时&lt;/b&gt;&lt;br&gt;它依赖共享 LLM/HTTP 层最终返回或抛错；主、备调用都在同一 Worker 内串行发生，真实结束前持续占用一个岗位解析 permit。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2660" y="650" width="470" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-n4" value="&lt;b&gt;后台只生成候选画像&lt;/b&gt;&lt;br&gt;解析成功不会直接覆盖正式画像，必须由用户确认后才生效；重新解析失败时，旧正式画像仍可继续用于面试。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2660" y="900" width="470" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-n5" value="&lt;b&gt;防止迟到结果覆盖当前事实&lt;/b&gt;&lt;br&gt;每个岗位只有一条当前任务；写回锁定岗位和任务，要求当前 taskId 完全一致且状态仍为 RUNNING。岗位已归档时删除任务并丢弃结果。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2660" y="1240" width="470" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="sq-n6" value="&lt;b&gt;结束时按固定顺序释放&lt;/b&gt;&lt;br&gt;先确认 MySQL 已收口，再清除参与者 busy 并按需回 ready，最后归还 permit、唤醒下一轮。MySQL 未确认时故意保留 busy，避免同参与者继续领取。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="sequence-1">
+          <mxGeometry x="2660" y="1490" width="470" height="125" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="confirm" name="详细设计-确认与重新解析">
+    <mxGraphModel fold="1" pageWidth="1800" dx="1800" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1400" dy="1400" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="confirm-0" />
+        <mxCell id="confirm-1" parent="confirm-0" />
+        <mxCell id="confirm-title" value="详细设计：候选画像确认与重新解析" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="confirm-1">
+          <mxGeometry x="40" y="20" width="1720" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="confirm-subtitle" value="确认只发布请求 taskId 对应的当前 SUCCEEDED 候选并删除任务；重新解析删除旧终态任务后创建新 WAITING，旧正式画像继续可用。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="confirm-1">
+          <mxGeometry x="40" y="64" width="1720" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-left" value="确认候选画像" style="swimlane;html=1;startSize=34;horizontal=1;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontStyle=1;fontColor=#334155;" vertex="1" parent="confirm-1">
+          <mxGeometry x="40" y="110" width="820" height="1170" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-right" value="重新解析 / 失败重试" style="swimlane;html=1;startSize=34;horizontal=1;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontStyle=1;fontColor=#334155;" vertex="1" parent="confirm-1">
+          <mxGeometry x="900" y="110" width="860" height="1170" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c0" value="用户确认候选画像" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="confirm-1">
+          <mxGeometry x="350" y="160" width="200" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c1" value="短事务锁定可管理的活动岗位，再锁定该岗位唯一的当前任务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="300" y="245" width="300" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c2" value="命中本人个人岗位或管理员公共岗位，且未归档？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="confirm-1">
+          <mxGeometry x="355" y="340" width="190" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-ce1" value="岗位不存在或已归档&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_NOT_FOUND / POSITION_ARCHIVED&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="confirm-1">
+          <mxGeometry x="70" y="350" width="230" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c3" value="请求 taskId 正是当前任务，且状态为 SUCCEEDED？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="confirm-1">
+          <mxGeometry x="350" y="465" width="200" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-ce2" value="当前任务不存在、已变化或候选为空&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_ANALYSIS_TASK_STALE&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="confirm-1">
+          <mxGeometry x="70" y="475" width="230" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cn1" value="&lt;b&gt;当前任务契约&lt;/b&gt;&lt;br&gt;每个岗位最多一条任务；请求 taskId 必须精确命中，状态必须是 SUCCEEDED，candidateProfileData 必须非空。没有 generation 或画像版本比较。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="confirm-1">
+          <mxGeometry x="590" y="440" width="250" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c4" value="校验用户提交的确认画像字段" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="315" y="595" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c5" value="序列化画像；查找或构造唯一 position_profile&lt;br&gt;准备画像字段与岗位 level" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="325" y="700" width="250" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cn2" value="首次确认插入正式画像，后续确认覆盖同一岗位的唯一画像行。画像没有业务版本号；公共画像 user_id 为 NULL。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="confirm-1">
+          <mxGeometry x="610" y="685" width="225" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c6" value="确认画像成功序列化？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="confirm-1">
+          <mxGeometry x="350" y="810" width="200" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-ce3" value="序列化失败，整个事务回滚&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;PROFILE_DATA_INVALID&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="confirm-1">
+          <mxGeometry x="70" y="820" width="230" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c7" value="同一事务：保存/替换正式画像、同步岗位等级、删除当前任务&lt;br&gt;任一数据库异常都会整体回滚" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="305" y="940" width="290" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c8" value="提交：新正式画像生效" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="325" y="1050" width="250" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-c9" value="返回：正式画像已经可用&lt;br&gt;当前解析任务为空；公共岗位立即公开" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="310" y="1150" width="280" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-ce1e" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="confirm-1" source="cr-c2" target="cr-ce1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-ce2e" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="confirm-1" source="cr-c3" target="cr-ce2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-ce3e" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="confirm-1" source="cr-c6" target="cr-ce3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c0" target="cr-c1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c1" target="cr-c2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf3" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c2" target="cr-c3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf4" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c3" target="cr-c4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c4" target="cr-c5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c5" target="cr-c6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf7" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c6" target="cr-c7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c7" target="cr-c8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cf9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-c8" target="cr-c9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cn1e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="confirm-1" source="cr-c3" target="cr-cn1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-cn2e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="confirm-1" source="cr-c5" target="cr-cn2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r0" value="重新解析或失败重试" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1225" y="160" width="230" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r1" value="个人：事务首读锁定 sys_user 行&lt;br&gt;公共：管理员入口先取得固定 PUBLIC Redisson 锁" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1200" y="245" width="280" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r2" value="命中可管理岗位且未归档？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1245" y="340" width="190" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re1" value="岗位不存在或已归档&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_NOT_FOUND / POSITION_ARCHIVED&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="confirm-1">
+          <mxGeometry x="935" y="350" width="240" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r3" value="当前任务是 WAITING 或 RUNNING？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1235" y="465" width="210" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re2" value="已有任务正在处理，不得替换&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_ANALYSIS_IN_PROGRESS&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="confirm-1">
+          <mxGeometry x="935" y="475" width="240" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r4" value="个人距上次成功提交已满 5 分钟？&lt;br&gt;公共岗位直接通过" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1235" y="590" width="210" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re3" value="个人 5 分钟内重复提交，返回剩余秒数&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;POSITION_SUBMISSION_TOO_FREQUENT&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="confirm-1">
+          <mxGeometry x="920" y="595" width="255" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r5" value="对应 queueOwner 的 WAITING 数低于配置上限？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1235" y="715" width="210" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re4" value="对应参与者等待任务已达上限，本次不创建&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_WAITING_LIMIT_EXCEEDED&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="confirm-1">
+          <mxGeometry x="935" y="725" width="240" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r6" value="当前任务若为 SUCCEEDED/FAILED：先删除并 flush&lt;br&gt;无当前任务时直接继续" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1190" y="830" width="300" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rn1" value="旧正式画像不删除、不降级。旧终态任务和候选会被物理删除；当前实现不保留任务历史，也没有解析代次。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1510" y="825" width="225" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r7" value="同一事务：创建唯一的新 WAITING 任务&lt;br&gt;taskId 同时作为参与者内 FIFO 顺序&lt;br&gt;个人路径记录成功提交时间" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1180" y="950" width="320" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r8" value="提交事务；释放用户行锁或 PUBLIC 提交锁" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1220" y="1075" width="240" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r9" value="AFTER_COMMIT 事件：有界执行器有限重试并幂等加入 Redis" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1200" y="1165" width="280" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rn2" value="Redis 入队重试耗尽不回滚 MySQL；任务仍为 WAITING 并告警。当前只在下次应用启动按 taskId 重建，不承诺运行中持续补扫。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1510" y="1150" width="225" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-r10" value="返回：新一轮解析已经排队&lt;br&gt;旧正式画像可用性保持不变" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="confirm-1">
+          <mxGeometry x="1200" y="1250" width="280" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re1e" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="confirm-1" source="cr-r2" target="cr-re1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re2e" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="confirm-1" source="cr-r3" target="cr-re2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re3e" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="confirm-1" source="cr-r4" target="cr-re3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-re4e" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="confirm-1" source="cr-r5" target="cr-re4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r0" target="cr-r1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r1" target="cr-r2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf3" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r2" target="cr-r3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf4" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r3" target="cr-r4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf5" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r4" target="cr-r5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf6" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r5" target="cr-r6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r6" target="cr-r7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r7" target="cr-r8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r8" target="cr-r9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rf10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="confirm-1" source="cr-r9" target="cr-r10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rn1e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="confirm-1" source="cr-r6" target="cr-rn1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rn2e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="confirm-1" source="cr-r9" target="cr-rn2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cr-rule" value="个人新建与重新解析共享 5 分钟频控和 WAITING 上限；公共路径使用独立 PUBLIC 锁与公共上限。重试删除旧 FAILED 后创建新 taskId，不存在 generation。" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#6b7280;" vertex="1" parent="confirm-1">
+          <mxGeometry x="80" y="1340" width="1640" height="30" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="archive" name="详细设计-归档与永久删除">
+    <mxGraphModel fold="1" pageWidth="1800" dx="1800" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1280" dy="1280" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="archive-0" />
+        <mxCell id="archive-1" parent="archive-0" />
+        <mxCell id="archive-title" value="详细设计：归档与永久删除" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="archive-1">
+          <mxGeometry x="40" y="20" width="1720" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="archive-subtitle" value="归档立即禁止新面试并删除非运行任务；RUNNING 保留到 Worker 真实结束。永久删除还要求无 RUNNING 任务和 IN_PROGRESS 面试。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="archive-1">
+          <mxGeometry x="40" y="64" width="1720" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-left" value="归档：释放名额，保留数据" style="swimlane;html=1;startSize=34;horizontal=1;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontStyle=1;fontColor=#334155;" vertex="1" parent="archive-1">
+          <mxGeometry x="40" y="110" width="820" height="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-right" value="永久删除：不可恢复" style="swimlane;html=1;startSize=34;horizontal=1;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontStyle=1;fontColor=#334155;" vertex="1" parent="archive-1">
+          <mxGeometry x="900" y="110" width="860" height="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a0" value="开始归档" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="archive-1">
+          <mxGeometry x="365" y="160" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a1" value="个人：先锁 sys_user 再锁本人岗位&lt;br&gt;公共：管理员入口锁定公共岗位；随后锁当前任务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="290" y="240" width="320" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a2" value="按当前用户查到岗位？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="archive-1">
+          <mxGeometry x="355" y="335" width="190" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-ax1" value="岗位不存在&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_NOT_FOUND&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="archive-1">
+          <mxGeometry x="70" y="345" width="230" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a3" value="已经归档？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="archive-1">
+          <mxGeometry x="370" y="455" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-ar1" value="幂等返回归档成功" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="610" y="465" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a4" value="当前解析任务处于哪种状态？&lt;br&gt;也可能没有任务" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="archive-1">
+          <mxGeometry x="350" y="575" width="200" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a5w" value="WAITING：发布队列移除事件&lt;br&gt;并直接删除当前任务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="archive-1">
+          <mxGeometry x="70" y="710" width="210" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a5r" value="RUNNING：任务保持原状&lt;br&gt;不设置取消标记，也不提前释放容量" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="archive-1">
+          <mxGeometry x="320" y="700" width="260" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a5n" value="SUCCEEDED / FAILED：直接删除任务&lt;br&gt;无任务：无需处理" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="archive-1">
+          <mxGeometry x="620" y="710" width="200" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a6" value="同一事务写 archivedAt&lt;br&gt;个人岗位立即释放一个活动岗位名额" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="250" y="835" width="340" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a7" value="事务提交后：仅 WAITING 删除路径&lt;br&gt;异步从 Redis 移除对应投影" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="300" y="945" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-a8" value="归档成功&lt;br&gt;正式画像保留，但岗位不可新建面试" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="260" y="1045" width="380" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-an1" value="归档不等待 RUNNING 结束。模型调用返回或抛错后，Worker 锁定岗位发现已归档，删除当前任务并丢弃结果；之后才结束 Redis busy、归还 permit。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="archive-1">
+          <mxGeometry x="610" y="805" width="220" height="108" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-an2" value="进行中面试已保存完整快照，不受归档影响；归档立即释放一个未归档岗位名额。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="archive-1">
+          <mxGeometry x="65" y="930" width="215" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a0" target="ad-a1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a1" target="ad-a2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af2n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="archive-1" source="ad-a2" target="ad-ax1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af3" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a2" target="ad-a3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af3y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="archive-1" source="ad-a3" target="ad-ar1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af4" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a3" target="ad-a4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af5w" value="WAITING" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="archive-1" source="ad-a4" target="ad-a5w">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af5r" value="RUNNING" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a4" target="ad-a5r">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af5n" value="其他" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="archive-1" source="ad-a4" target="ad-a5n">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af6w" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="archive-1" source="ad-a5w" target="ad-a6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af6r" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a5r" target="ad-a6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af6n" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="archive-1" source="ad-a5n" target="ad-a6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a6" target="ad-a7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-af8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-a7" target="ad-a8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-an1e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="archive-1" source="ad-a6" target="ad-an1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-an2e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="archive-1" source="ad-a7" target="ad-an2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d0" value="开始永久删除" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="archive-1">
+          <mxGeometry x="1245" y="160" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d1" value="短事务锁定本人个人岗位或管理员公共岗位&lt;br&gt;随后按 Task → Profile 顺序锁定" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="1195" y="240" width="290" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d2" value="按当前用户查到岗位？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="archive-1">
+          <mxGeometry x="1240" y="335" width="200" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dx1" value="岗位不存在&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_NOT_FOUND&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="archive-1">
+          <mxGeometry x="930" y="345" width="240" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d3" value="已经归档？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="archive-1">
+          <mxGeometry x="1250" y="455" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dx2" value="请先归档岗位&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSITION_NOT_ARCHIVED&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="archive-1">
+          <mxGeometry x="930" y="465" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d4" value="当前任务是 RUNNING，或存在 IN_PROGRESS 面试？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="archive-1">
+          <mxGeometry x="1225" y="575" width="230" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dx3" value="守卫拒绝永久删除&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;POSITION_ANALYSIS_RUNNING / POSITION_HAS_ACTIVE_INTERVIEW&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="archive-1">
+          <mxGeometry x="930" y="585" width="245" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d5" value="守卫通过：任务为空或非 RUNNING&lt;br&gt;且没有 IN_PROGRESS 面试" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="1200" y="715" width="280" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d6" value="同一事务按顺序永久删除&lt;br&gt;当前任务（含候选）→ 正式画像 → 岗位" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="1160" y="835" width="360" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d7" value="历史面试及岗位/画像完整快照保持不变" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="1160" y="945" width="360" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-d8" value="事务提交后返回删除成功&lt;br&gt;此操作不可恢复" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="1170" y="1050" width="340" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dn1" value="只阻止有进行中面试的删除。已结束面试不阻止，因为不再回查岗位或正式画像。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="archive-1">
+          <mxGeometry x="1515" y="565" width="215" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dn2" value="永久删除前已明确拒绝 RUNNING，因此不存在仍会写回的后台任务。非运行当前任务如存在会在同一事务删除；历史 Interview 始终保留。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="archive-1">
+          <mxGeometry x="1535" y="790" width="195" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dn3" value="永久删除不可撤销；不得级联删除历史面试或覆盖快照。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="archive-1">
+          <mxGeometry x="1515" y="1018" width="215" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d0" target="ad-d1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d1" target="ad-d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df2n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="archive-1" source="ad-d2" target="ad-dx1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df3" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d2" target="ad-d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df3n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="archive-1" source="ad-d3" target="ad-dx2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df4" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d3" target="ad-d4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df4y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="archive-1" source="ad-d4" target="ad-dx3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df5" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d4" target="ad-d5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d5" target="ad-d6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d6" target="ad-d7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-df8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#9673a6;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="archive-1" source="ad-d7" target="ad-d8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dn1e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="archive-1" source="ad-d4" target="ad-dn1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-dn2e" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="archive-1" source="ad-d6" target="ad-dn2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-legend" value="灰色＝归档与任务清理　红色＝拒绝或不可逆删除　紫色＝事务写入　绿色＝保留或成功结果" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#6b7280;" vertex="1" parent="archive-1">
+          <mxGeometry x="180" y="1210" width="1440" height="28" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="recovery" name="详细设计-故障恢复与队列补回">
+    <mxGraphModel fold="1" pageWidth="2150" dx="2150" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1900" dy="1900" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="recovery-0" />
+        <mxCell id="recovery-1" parent="recovery-0" />
+        <mxCell id="recovery-title" value="详细设计：应用启动恢复与 Redis 队列重建" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="recovery-1">
+          <mxGeometry x="40" y="20" width="2070" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="recovery-subtitle" value="恢复只在 ApplicationRunner 启动阶段执行：先用 MySQL 收口遗留任务，再清空并重建本 Goal 的 Redis 投影，全部成功后才启动调度器。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="recovery-1">
+          <mxGeometry x="40" y="64" width="2070" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-s1" value="ApplicationRunner&lt;br&gt;开始执行" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="recovery-1">
+          <mxGeometry x="560" y="120" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-s2" value="Dispatcher&lt;br&gt;autoStartup=false" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="recovery-1">
+          <mxGeometry x="870" y="120" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-s3" value="Queue&lt;br&gt;recoveryComplete=false" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1180" y="120" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-merge" value="进入单实例唯一一次启动恢复&lt;br&gt;启动期间到达的入队事件先保存在本地 pendingRecoveryTasks" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="800" y="245" width="360" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-startup" value="MySQL 中存在需要清理或收口的任务？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="recovery-1">
+          <mxGeometry x="885" y="360" width="190" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-interrupt" value="&lt;b&gt;按 taskId 升序在一个事务中收口&lt;/b&gt;&lt;br&gt;岗位不存在/已归档：删除任务；RUNNING：写 FAILED + APPLICATION_RESTARTED；WAITING owner 无效：写 FAILED" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="recovery-1">
+          <mxGeometry x="720" y="505" width="520" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-init" value="取得有效 WAITING 快照并与 pending 合并&lt;br&gt;按 taskId 去重排序；读取 owner 索引后删除本 Goal 全部 Redis Key" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="recovery-1">
+          <mxGeometry x="800" y="645" width="360" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-query" value="&lt;b&gt;从内存中的有序恢复列表取得下一条 QueueTask&lt;/b&gt;&lt;br&gt;每条只有 taskId + queueOwner；数据库恢复事务此时已经提交" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="recovery-1">
+          <mxGeometry x="650" y="765" width="520" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-has" value="还有下一条待恢复任务？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1270" y="765" width="220" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-zadd" value="校验 taskId 为正数&lt;br&gt;queueOwner 必须是 USER:&amp;lt;id&amp;gt; 或 PUBLIC" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1210" y="930" width="340" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-users" value="执行幂等 ENQUEUE Lua&lt;br&gt;写参与者 ZSet、ready List/Set 与 owner index；taskId 同时作为 score/member" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1140" y="1045" width="480" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-ok" value="本条 Redis 写入成功？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1270" y="1170" width="220" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-cursor" value="继续处理有序列表下一条&lt;br&gt;pending 在整批成功前不清空" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="recovery-1">
+          <mxGeometry x="750" y="1185" width="330" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-clean" value="全部任务写入成功：清空 pendingRecoveryTasks&lt;br&gt;设置 recoveryComplete=true；旧 ready/busy/ZSet 已在重建前整体清除" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1580" y="765" width="500" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-wake" value="显式 dispatcher.start()&lt;br&gt;之后正常调度才可从 Redis 预留并由 MySQL 最终确认领取" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1595" y="900" width="470" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-end" value="启动恢复完成&lt;br&gt;岗位调度开放" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1725" y="1015" width="210" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-startx" value="MySQL 恢复事务抛出异常&lt;br&gt;RecoveryRunner 无法取得可靠快照" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1320" y="510" width="340" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-stop" value="异常继续向外传播，Runner 未完成&lt;br&gt;dispatcher.start() 不会执行&lt;br&gt;修复基础设施后重新启动应用" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1320" y="620" width="340" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-redisx" value="Redis 旧 Key 清理或任一重建写入失败&lt;br&gt;resetAndRestore 抛出异常" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1580" y="1180" width="500" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-hold" value="recoveryComplete 保持 false，调度器不启动&lt;br&gt;MySQL WAITING 事实仍在；修复 Redis 后必须重新启动应用完整重建" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1580" y="1295" width="500" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-immediate" value="运行中 AFTER_COMMIT 入队有限重试仍失败" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="recovery-1">
+          <mxGeometry x="80" y="770" width="400" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-keep" value="不回滚已经提交的岗位和任务&lt;br&gt;MySQL 任务仍为 WAITING，taskId 不变&lt;br&gt;记录脱敏告警；本进程可能暂时无法调度该任务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="80" y="885" width="400" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-later" value="当前没有 Redis 重连监听或周期 MySQL 补扫&lt;br&gt;该 WAITING 投影依赖下次应用启动重建" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="80" y="1015" width="400" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-n1" value="&lt;b&gt;四状态的启动处理&lt;/b&gt;&lt;br&gt;RUNNING：改为 FAILED / APPLICATION_RESTARTED，不自动重跑。&lt;br&gt;有效 WAITING：重建 Redis。&lt;br&gt;SUCCEEDED/FAILED：保留在 MySQL，不入队。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="80" y="1510" width="600" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-n2" value="&lt;b&gt;为什么 Redis 丢了也不会丢任务&lt;/b&gt;&lt;br&gt;MySQL 保存一岗位一条当前任务及四状态；Redis 只是可重建投影。taskId 同时提供参与者内 FIFO 和恢复稳定顺序。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="770" y="1510" width="600" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-n3" value="&lt;b&gt;重启后顺序能恢复到什么程度&lt;/b&gt;&lt;br&gt;同一参与者严格按 taskId 升序；ready 参与者顺序由全局 taskId 首次出现顺序重建，不承诺还原崩溃前瞬时轮转位置。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1460" y="1510" width="610" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-n4" value="&lt;b&gt;启动时不会保留旧 busy&lt;/b&gt;&lt;br&gt;所有遗留 RUNNING 已先收口为 FAILED；resetAndRestore 清空 busy Hash，再只为有效 WAITING 重建 ready 与任务 ZSet。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="80" y="1710" width="600" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-n5" value="&lt;b&gt;为什么不会一直查数据库&lt;/b&gt;&lt;br&gt;当前只在应用启动扫描一次 MySQL。正常调度从 Redis 取候选，仅在领取时做 MySQL 条件确认；没有重连监听或周期补扫。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="770" y="1710" width="600" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-n6" value="&lt;b&gt;当前部署边界&lt;/b&gt;&lt;br&gt;恢复、dispatcher 与 permit 都按单应用实例设计；当前没有恢复负责人租约、多实例总并发或跨实例 busy 一致性保证。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="recovery-1">
+          <mxGeometry x="1460" y="1710" width="610" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-es1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="recovery-1" source="rc-s1" target="rc-merge">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-es2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-s2" target="rc-merge">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-es3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="recovery-1" source="rc-s3" target="rc-merge">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-merge" target="rc-startup">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e2y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-startup" target="rc-interrupt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e2n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;" edge="1" parent="recovery-1" source="rc-startup" target="rc-init">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1290" y="407" />
+              <mxPoint x="1290" y="679" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rc-e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-interrupt" target="rc-init">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e3x" value="事务失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="recovery-1" source="rc-interrupt" target="rc-startx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e3xx" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-startx" target="rc-stop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-init" target="rc-query">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="recovery-1" source="rc-query" target="rc-has">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e5y" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-has" target="rc-zadd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e5n" value="没有更多任务" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="recovery-1" source="rc-has" target="rc-clean">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-zadd" target="rc-users">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-users" target="rc-ok">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e8y" value="写入成功，继续下一条" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="recovery-1" source="rc-ok" target="rc-cursor">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e8n" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="recovery-1" source="rc-ok" target="rc-redisx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e8nn" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-redisx" target="rc-hold">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-loop" value="回到读取步骤" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="recovery-1" source="rc-cursor" target="rc-query">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="1219" />
+              <mxPoint x="600" y="813" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rc-e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-clean" target="rc-wake">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-wake" target="rc-end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-ei1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-immediate" target="rc-keep">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rc-ei2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="recovery-1" source="rc-keep" target="rc-later">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="state" name="状态流转-岗位画像与解析任务">
+    <mxGraphModel fold="1" pageWidth="2000" dx="2000" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1630" dy="1630" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="state-0" />
+        <mxCell id="state-1" parent="state-0" />
+        <mxCell id="state-title" value="状态流转：岗位、正式画像与四状态当前解析任务" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="state-1">
+          <mxGeometry x="40" y="20" width="1920" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="state-subtitle" value="正式画像和当前解析任务是两个独立事实；任务处于 WAITING、RUNNING、SUCCEEDED 或 FAILED 时，都不会自动删除已有正式画像。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4b5563;" vertex="1" parent="state-1">
+          <mxGeometry x="40" y="64" width="1920" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="st-fact" value="&lt;b&gt;页面必须同时看两件互不替代的事实&lt;/b&gt;&lt;br&gt;1. profileUsable：唯一正式画像是否存在；2. latestTaskStatus：当前任务的四状态或无任务。FAILED 只描述本轮失败，不影响已确认画像。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="80" y="105" width="1840" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pz" value="轨道 A：岗位生命周期与唯一正式画像（独立于当前解析任务）" style="swimlane;html=1;startSize=34;horizontal=1;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontStyle=1;fontColor=#334155;" vertex="1" parent="state-1">
+          <mxGeometry x="40" y="200" width="1920" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pl1" value="正式画像轨道" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fontColor=#475569;" vertex="1" parent="state-1">
+          <mxGeometry x="70" y="245" width="170" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="st-p0" value="岗位活动，但还没有正式画像&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;archivedAt=null · profileUsable=false&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="270" y="235" width="280" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="st-p1" value="岗位活动，唯一正式画像已生效&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;archivedAt=null · profileUsable=true&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="710" y="235" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="st-p2" value="当前任务保存了候选画像&lt;br&gt;确认前不替换正式画像，也不能直接用于面试&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;taskId · SUCCEEDED&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="1170" y="225" width="330" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pl2" value="岗位可用性轨道" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fontColor=#475569;" vertex="1" parent="state-1">
+          <mxGeometry x="70" y="480" width="170" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pa" value="岗位正常使用&lt;br&gt;无论是否已经有正式画像&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;ACTIVE&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="270" y="455" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="st-p3" value="岗位已归档&lt;br&gt;画像保留，但不可新建面试&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;ARCHIVED&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="870" y="455" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="st-p4" value="岗位已永久删除&lt;br&gt;岗位和画像已移除&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;DELETED&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="1470" y="455" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="st-p5" value="重新解析期间，既有正式画像行保持不变并继续用于新面试快照" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="720" y="355" width="290" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="st-p6" value="归档或永久删除都不会改动历史面试快照；历史面试始终读取创建时保存的岗位名称、公司、类别和画像" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="630" y="560" width="940" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pe" value="taskId 不再命中当前 SUCCEEDED 候选&lt;br&gt;拒绝确认，不修改正式画像" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="state-1">
+          <mxGeometry x="1640" y="240" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pe01" value="确认首个 SUCCEEDED 候选" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-p0" target="st-p1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pe21" value="确认当前 taskId" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="state-1" source="st-p2" target="st-p1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pe13" value="用户归档" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-pa" target="st-p3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pe34" value="无 RUNNING 任务且无 IN_PROGRESS 面试" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-p3" target="st-p4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-pn1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="state-1" source="st-p1" target="st-p5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-px" value="确认条件不成立" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-p2" target="st-pe">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-tz" value="轨道 B：每个岗位唯一的当前任务（持久化状态只有 WAITING / RUNNING / SUCCEEDED / FAILED）" style="swimlane;html=1;startSize=34;horizontal=1;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontStyle=1;fontColor=#334155;" vertex="1" parent="state-1">
+          <mxGeometry x="40" y="660" width="1920" height="560" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t0" value="为岗位插入唯一的当前任务&lt;br&gt;taskId 也是 FIFO 顺序" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="70" y="755" width="170" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t1" value="等待解析&lt;br&gt;等待轮到所属参与者&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;WAITING&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="280" y="745" width="220" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t2" value="正在解析&lt;br&gt;已取得本地 permit 与 Redis busy&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;RUNNING&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="570" y="745" width="230" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="st-td" value="本次执行成功并得到合格候选？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="state-1">
+          <mxGeometry x="900" y="735" width="240" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t3" value="合格候选 JSON 已保存&lt;br&gt;等待所有者或管理员确认&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;SUCCEEDED&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="1240" y="730" width="270" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t4" value="确认事务写正式画像&lt;br&gt;并物理删除当前任务&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;无任务（不是 CONFIRMED 状态）&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="1610" y="745" width="230" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t5" value="归档清理完成&lt;br&gt;当前任务被物理删除&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;无任务（没有 CANCELLED 状态）&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="250" y="980" width="250" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t6" value="RUNNING 期间岗位被归档&lt;br&gt;任务保持 RUNNING 到模型真实结束&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;无取消标记&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="560" y="970" width="250" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="st-tf" value="所有失败分类都收口为同一个 FAILED 状态；差异只保存在 errorCode / errorMessage" style="swimlane;html=1;startSize=42;horizontal=1;rounded=0;fillColor=#fff7f7;strokeColor=#d6a0a0;fontSize=13;fontStyle=1;fontColor=#7f1d1d;" vertex="1" parent="state-1">
+          <mxGeometry x="900" y="900" width="900" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t7" value="模型调用、空响应、JSON 或画像校验失败&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;FAILED · LLM_*&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="940" y="970" width="240" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t8" value="共享调用层抛出超时，或 Worker 被中断&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;FAILED · LLM_TIMEOUT / WORKER_INTERRUPTED&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="1230" y="970" width="240" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="st-t9" value="线程提交失败或启动发现遗留 RUNNING&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;FAILED · WORKER_SUBMISSION_FAILED / APPLICATION_RESTARTED&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="1520" y="970" width="240" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="st-tn" value="&lt;b&gt;任何结果保存前都锁定 Position → 当前 Task&lt;/b&gt;：只接受请求 taskId 仍精确命中且状态为 RUNNING。岗位已归档时删除任务并丢弃结果；不存在 generation、画像版本或取消标记。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="420" y="1140" width="1400" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te01" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-t0" target="st-t1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-t1" target="st-t2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-t2" target="st-td">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-tde" value="是：RUNNING → SUCCEEDED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-td" target="st-t3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te34" value="确认当前 taskId 并删除任务" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#82b366;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-t3" target="st-t4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te15" value="WAITING 时归档：直接删除" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="state-1" source="st-t1" target="st-t5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te26" value="RUNNING 时归档：先保留任务" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="state-1" source="st-t2" target="st-t6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te65" value="Worker 结束后删除任务" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="state-1" source="st-t6" target="st-t5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-te27" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0.5;exitY=1;entryX=0;entryY=0;" edge="1" parent="state-1" source="st-td" target="st-tf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-gz" value="轨道 C：重新解析或重试（删除旧终态任务，再创建新的唯一当前任务）" style="swimlane;html=1;startSize=34;horizontal=1;rounded=0;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontStyle=1;fontColor=#334155;" vertex="1" parent="state-1">
+          <mxGeometry x="40" y="1240" width="1920" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="st-g1" value="所有者或管理员点击重新解析 / 重试&lt;br&gt;当前任务只允许为空、SUCCEEDED 或 FAILED" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="80" y="1325" width="330" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="st-g2" value="任务可替换且提交守卫全部通过？&lt;br&gt;个人频控/上限；公共锁/上限" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=4;" vertex="1" parent="state-1">
+          <mxGeometry x="490" y="1310" width="280" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="st-g3" value="事务内删除旧 SUCCEEDED/FAILED 并 flush&lt;br&gt;再插入新的 WAITING；正式画像不变" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="880" y="1315" width="310" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="st-g4" value="新 taskId 在提交后投影到 Redis&lt;br&gt;页面开始跟踪这条当前任务&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;WAITING · taskId&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=14;spacing=8;" vertex="1" parent="state-1">
+          <mxGeometry x="1300" y="1325" width="270" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="st-g5" value="WAITING/RUNNING 不可替换，或频控、等待上限、公共锁守卫未通过" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=13;spacing=7;" vertex="1" parent="state-1">
+          <mxGeometry x="490" y="1450" width="280" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="st-gn" value="当前实现不保存任务历史：旧任务与旧候选会被物理删除。重新解析不新增岗位，也不删除或降级已经确认的正式画像。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="870" y="1435" width="700" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="st-ge12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-g1" target="st-g2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-ge23" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-g2" target="st-g3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-ge25" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#b85450;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="state-1" source="st-g2" target="st-g5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-ge34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#ffffff;strokeColor=#4b5563;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="state-1" source="st-g3" target="st-g4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-gn1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;dashPattern=4 4;strokeColor=#9ca3af;strokeWidth=1;endArrow=none;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="state-1" source="st-g3" target="st-gn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="st-api" value="&lt;b&gt;页面展示口径&lt;/b&gt;：profileUsable 与 latestTaskStatus 分开展示；WAITING/RUNNING 每 2 秒轮询且无总时长上限；SUCCEEDED 停止轮询并提示确认；FAILED 停止轮询并允许重试。" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;spacing=9;align=left;verticalAlign=middle;" vertex="1" parent="state-1">
+          <mxGeometry x="100" y="1550" width="1800" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
