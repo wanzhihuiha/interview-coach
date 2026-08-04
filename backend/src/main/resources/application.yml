@@ -78,8 +78,8 @@ resume:
     storage-path: D:/trae_app_data/interview-coach/uploads/resumes
   llm:
     # 简历分析智能体 LLM 配置
-    # 默认关闭真实 LLM，使用 Mock 返回空画像；启用真实 LLM 时设置 enabled=true 并配置 vendors
-    enabled: false
+    # 开发测试使用 CPA 提供的 OpenAI 兼容接口；启动前需填写 openai.api-key。
+    enabled: ${RESUME_LLM_ENABLED:false}
     # LLM 调用超时时间（秒）
     timeout-seconds: 60
     # 失败重试次数
@@ -99,10 +99,10 @@ resume:
         model: qwen-plus
       openai:
         type: OPENAI_COMPATIBLE
-        enabled: false
+        enabled: ${OPENAI_ENABLED:false}
         api-key: ${OPENAI_API_KEY:}
-        base-url: https://api.openai.com
-        model: gpt-3.5-turbo
+        base-url: ${OPENAI_BASE_URL:http://localhost:18717}
+        model: ${OPENAI_MODEL:gpt-5.6-sol}
       zhipu:
         type: OPENAI_COMPATIBLE
         enabled: false
@@ -113,15 +113,15 @@ resume:
     tiers:
       l1:
         # 轻量任务：格式化、简单分类
-        primary: dashscope
-        fallback: dashscope
+        primary: openai
+        fallback: openai
       l2:
         # 标准任务：简历/JD 解析、画像生成
-        primary: dashscope
+        primary: openai
         fallback: openai
       l3:
         # 高性能任务：深度推理、复杂评估
-        primary: dashscope
+        primary: openai
         fallback: openai
 
 position:
