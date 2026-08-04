@@ -13,7 +13,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * 岗位画像实体，对应数据库 position_profile 表。
+ * 已确认的岗位正式画像；后台解析候选只保存在当前任务中。
  */
 @Entity
 @Table(name = "position_profile")

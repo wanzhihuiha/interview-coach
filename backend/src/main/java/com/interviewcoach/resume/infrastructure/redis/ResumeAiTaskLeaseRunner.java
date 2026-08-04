@@ -4,7 +4,6 @@ import com.interviewcoach.resume.application.event.ResumeAiTaskLease;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -14,16 +13,22 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ResumeAiTaskLeaseRunner {
 
     public static final String RENEW_EXECUTOR_BEAN_NAME = "resumeAiTaskLeaseRenewExecutor";
 
     private final ResumeAiTaskAdmissionService admissionService;
     private final ResumeAiTaskProperties properties;
-
-    @Qualifier(RENEW_EXECUTOR_BEAN_NAME)
     private final ScheduledExecutorService renewExecutor;
+
+    public ResumeAiTaskLeaseRunner(
+            ResumeAiTaskAdmissionService admissionService,
+            ResumeAiTaskProperties properties,
+            @Qualifier(RENEW_EXECUTOR_BEAN_NAME) ScheduledExecutorService renewExecutor) {
+        this.admissionService = admissionService;
+        this.properties = properties;
+        this.renewExecutor = renewExecutor;
+    }
 
     public void run(Long userId, Long resumeId, ResumeAiTaskLease lease, Runnable worker) {
         Thread workerThread = Thread.currentThread();

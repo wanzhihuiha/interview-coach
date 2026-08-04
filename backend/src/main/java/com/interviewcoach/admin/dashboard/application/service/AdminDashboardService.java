@@ -3,8 +3,9 @@ package com.interviewcoach.admin.dashboard.application.service;
 import com.interviewcoach.admin.dashboard.application.dto.AdminDashboardStatsResponse;
 import com.interviewcoach.common.security.agent.AgentAuditLogRepository;
 import com.interviewcoach.interview.domain.repository.TemporaryQuestionBankRepository;
-import com.interviewcoach.position.domain.entity.PositionAuditStatus;
-import com.interviewcoach.position.domain.repository.PositionRepository;
+import com.interviewcoach.position.domain.entity.PositionAnalysisTaskStatus;
+import com.interviewcoach.position.domain.model.PositionAnalysisQueueOwner;
+import com.interviewcoach.position.domain.repository.PositionAnalysisTaskRepository;
 import com.interviewcoach.user.domain.repository.UserRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -20,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AdminDashboardService {
 
-    private final PositionRepository positionRepository;
+    private final PositionAnalysisTaskRepository positionAnalysisTaskRepository;
     private final TemporaryQuestionBankRepository temporaryQuestionBankRepository;
     private final UserRepository userRepository;
     private final AgentAuditLogRepository agentAuditLogRepository;
@@ -30,12 +31,15 @@ public class AdminDashboardService {
      */
     @Transactional(readOnly = true)
     public AdminDashboardStatsResponse getStats() {
-        long pendingPositions = positionRepository.countByAuditStatus(PositionAuditStatus.PENDING);
+        long pendingPublicPositions = positionAnalysisTaskRepository.countByQueueOwnerAndStatus(
+                PositionAnalysisQueueOwner.PUBLIC,
+                PositionAnalysisTaskStatus.SUCCEEDED);
         long pendingQuestions = temporaryQuestionBankRepository.countByStatus("PENDING");
         long totalUsers = userRepository.count();
         long todayAudits = countTodayAudits();
 
-        return new AdminDashboardStatsResponse(pendingPositions, pendingQuestions, totalUsers, todayAudits);
+        return new AdminDashboardStatsResponse(
+                pendingPublicPositions, pendingQuestions, totalUsers, todayAudits);
     }
 
     private long countTodayAudits() {

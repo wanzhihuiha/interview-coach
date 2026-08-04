@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.DynamicUpdate;
 import org.springframework.util.StringUtils;
 
 /**
@@ -24,6 +25,7 @@ import org.springframework.util.StringUtils;
  */
 @Entity
 @Table(name = "sys_user")
+@DynamicUpdate
 @Getter
 @Setter
 public class User {
@@ -56,6 +58,9 @@ public class User {
      */
     @Column(name = "roles", length = 100, nullable = false)
     private String roles = UserRole.USER.name();
+
+    @Column(name = "last_position_analysis_submitted_at")
+    private LocalDateTime lastPositionAnalysisSubmittedAt;
 
     @Column(name = "create_time", nullable = false, updatable = false)
     private LocalDateTime createTime;

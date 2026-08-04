@@ -1,8 +1,8 @@
 package com.interviewcoach.position.interfaces.rest;
 
 import com.interviewcoach.common.response.ApiResponse;
-import com.interviewcoach.position.application.dto.AuditPositionRequest;
 import com.interviewcoach.position.application.dto.ConfirmPositionRequest;
+import com.interviewcoach.position.application.dto.PositionAnalysisStatusResponse;
 import com.interviewcoach.position.application.dto.PositionCreateRequest;
 import com.interviewcoach.position.application.dto.PositionCreateResponse;
 import com.interviewcoach.position.application.dto.PositionDetailResponse;
@@ -11,7 +11,6 @@ import com.interviewcoach.position.application.dto.PositionProfileResponse;
 import com.interviewcoach.position.application.service.PositionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 岗位模块 REST 接口。
+ * 个人岗位管理和已发布公共岗位只读 REST 接口。
  */
 @RestController
 @RequestMapping("/api/v1/positions")
@@ -48,7 +47,8 @@ public class PositionController {
             @RequestPart("file") MultipartFile file,
             @RequestParam("fileType") String fileType,
             @RequestParam("positionName") String positionName) {
-        return ApiResponse.success(positionService.uploadPosition(userId, file, fileType, positionName));
+        return ApiResponse.success(
+                positionService.uploadPosition(userId, file, fileType, positionName));
     }
 
     @GetMapping
@@ -56,13 +56,13 @@ public class PositionController {
             @AuthenticationPrincipal Long userId,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "10") int size,
-            @RequestParam(value = "parseStatus", required = false) String parseStatus,
-            @RequestParam(value = "auditStatus", required = false) String auditStatus) {
-        return ApiResponse.success(positionService.listPositions(userId, page, size, parseStatus, auditStatus));
+            @RequestParam(value = "archived", defaultValue = "false") boolean archived) {
+        return ApiResponse.success(
+                positionService.listPositions(userId, page, size, archived));
     }
 
     /**
-     * 查询所有已审核通过的公共岗位，供所有登录用户选择。
+     * 查询已确认且未归档的公共岗位，普通用户没有任何公共写入口。
      */
     @GetMapping("/public")
     public ApiResponse<PositionListResponse> listPublicPositions(
@@ -72,14 +72,15 @@ public class PositionController {
     }
 
     /**
-     * 查询当前用户可访问的岗位列表（用户自己的岗位 + 已审核通过的公共岗位），用于首页展示。
+     * 首页组合本人和已发布公共岗位，只返回正式画像可用于面试的活动记录。
      */
     @GetMapping("/accessible")
     public ApiResponse<PositionListResponse> listAccessiblePositions(
             @AuthenticationPrincipal Long userId,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "10") int size) {
-        return ApiResponse.success(positionService.listAccessiblePositions(userId, page, size));
+        return ApiResponse.success(
+                positionService.listAccessiblePositions(userId, page, size));
     }
 
     @GetMapping("/{id}")
@@ -96,12 +97,20 @@ public class PositionController {
         return ApiResponse.success(positionService.getPositionProfile(userId, positionId));
     }
 
+    @GetMapping("/{id}/analysis-status")
+    public ApiResponse<PositionAnalysisStatusResponse> getAnalysisStatus(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable("id") Long positionId) {
+        return ApiResponse.success(positionService.getAnalysisStatus(userId, positionId));
+    }
+
     @PutMapping("/{id}/confirm")
     public ApiResponse<Void> confirmPosition(
             @AuthenticationPrincipal Long userId,
             @PathVariable("id") Long positionId,
             @Valid @RequestBody ConfirmPositionRequest request) {
-        positionService.confirmPosition(userId, positionId, request.getProfile());
+        positionService.confirmPosition(
+                userId, positionId, request.getTaskId(), request.getProfile());
         return ApiResponse.success();
     }
 
@@ -112,21 +121,19 @@ public class PositionController {
         return ApiResponse.success(positionService.reparsePosition(userId, positionId));
     }
 
+    @PutMapping("/{id}/archive")
+    public ApiResponse<Void> archivePosition(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable("id") Long positionId) {
+        positionService.archivePosition(userId, positionId);
+        return ApiResponse.success();
+    }
+
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deletePosition(
             @AuthenticationPrincipal Long userId,
             @PathVariable("id") Long positionId) {
         positionService.deletePosition(userId, positionId);
-        return ApiResponse.success();
-    }
-
-    @PutMapping("/{id}/audit")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<Void> auditPosition(
-            @AuthenticationPrincipal Long auditorId,
-            @PathVariable("id") Long positionId,
-            @Valid @RequestBody AuditPositionRequest request) {
-        positionService.auditPosition(positionId, request, auditorId);
         return ApiResponse.success();
     }
 }

@@ -71,6 +71,9 @@ public class Position {
     @Column(name = "is_public", nullable = false)
     private Boolean isPublic = false;
 
+    @Column(name = "archived_at")
+    private LocalDateTime archivedAt;
+
     @Column(name = "lock_interview_id")
     private Long lockInterviewId;
 
@@ -97,5 +100,12 @@ public class Position {
      */
     public boolean isLocked() {
         return lockInterviewId != null;
+    }
+
+    /**
+     * 判断岗位是否已经归档。
+     */
+    public boolean isArchived() {
+        return archivedAt != null;
     }
 }

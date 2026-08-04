@@ -19,13 +19,18 @@ public class PositionDetailResponse {
     private String level;
     private String levelLabel;
     private String jdContent;
-    private String parseStatus;
-    private String parseStatusLabel;
-    private String auditStatus;
-    private String auditStatusLabel;
     private Boolean isPublic;
     private Long userId;
+    private Boolean archived;
+    private LocalDateTime archivedAt;
+    private Long latestTaskId;
+    private String latestTaskStatus;
+    private String latestTaskStatusLabel;
+    private Boolean profileUsable;
+    private Boolean canConfirm;
+    private Boolean canRetry;
+    private String analysisErrorCode;
+    private String analysisErrorMessage;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private LocalDateTime auditedAt;
 }

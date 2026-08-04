@@ -13,9 +13,9 @@ import lombok.NoArgsConstructor;
 public class AdminDashboardStatsResponse {
 
     /**
-     * 待审核岗位数量。
+     * 等待管理员确认候选的公共岗位数量。
      */
-    private long pendingPositions;
+    private long pendingPublicPositions;
 
     /**
      * 待审核题目数量。

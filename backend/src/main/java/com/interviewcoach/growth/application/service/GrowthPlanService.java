@@ -10,8 +10,6 @@ import com.interviewcoach.growth.domain.repository.GrowthPlanRepository;
 import com.interviewcoach.interview.application.dto.InterviewDetailResponse;
 import com.interviewcoach.interview.application.dto.InterviewReportResponse;
 import com.interviewcoach.interview.application.service.InterviewService;
-import com.interviewcoach.position.domain.entity.Position;
-import com.interviewcoach.position.domain.repository.PositionRepository;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +26,6 @@ public class GrowthPlanService {
 
     private final GrowthPlanRepository growthPlanRepository;
     private final InterviewService interviewService;
-    private final PositionRepository positionRepository;
     private final CoachAgent coachAgent;
     private final ObjectMapper objectMapper;
 
@@ -53,7 +50,7 @@ public class GrowthPlanService {
             String reportText = buildReportText(report);
             InterviewDetailResponse interviewDetail = interviewService.getInterview(userId, interviewId);
             String positionTitle = interviewDetail.getPositionTitle();
-            String jobCategory = resolveJobCategory(interviewDetail.getPositionId());
+            String jobCategory = normalizeJobCategory(interviewDetail.getJobCategory());
             GrowthPlanResponse response = coachAgent.generatePlan(reportText, jobCategory, report.getWeaknesses());
 
             plan.setPositionTitle(positionTitle);
@@ -120,15 +117,7 @@ public class GrowthPlanService {
         }
     }
 
-    /**
-     * 根据岗位 ID 解析岗位大类，用于 CoachAgent 生成差异化成长方案。
-     */
-    private String resolveJobCategory(Long positionId) {
-        if (positionId == null) {
-            return "GENERAL";
-        }
-        return positionRepository.findById(positionId)
-                .map(Position::getJobCategory)
-                .orElse("GENERAL");
+    private String normalizeJobCategory(String jobCategory) {
+        return jobCategory == null || jobCategory.isBlank() ? "GENERAL" : jobCategory;
     }
 }

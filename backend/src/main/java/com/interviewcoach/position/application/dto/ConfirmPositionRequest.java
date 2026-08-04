@@ -11,6 +11,9 @@ import lombok.Data;
 @Data
 public class ConfirmPositionRequest {
 
+    @NotNull(message = "当前任务 ID 不能为空")
+    private Long taskId;
+
     @NotNull(message = "画像数据不能为空")
     @Valid
     private PositionProfileData profile;
