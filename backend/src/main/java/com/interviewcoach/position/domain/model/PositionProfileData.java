@@ -39,18 +39,4 @@ public class PositionProfileData {
         private String depthRange;
         private List<String> sampleQuestions;
     }
-
-    /**
-     * 创建空画像，用于 LLM 解析失败时的降级。
-     */
-    public static PositionProfileData empty() {
-        PositionProfileData data = new PositionProfileData();
-        data.setBasicInfo(new BasicInfo());
-        data.setRequiredSkills(List.of());
-        data.setPreferredSkills(List.of());
-        data.setProbingDirections(List.of());
-        data.setInterviewFocus(List.of());
-        data.setConfidenceLevel(0.0);
-        return data;
-    }
 }

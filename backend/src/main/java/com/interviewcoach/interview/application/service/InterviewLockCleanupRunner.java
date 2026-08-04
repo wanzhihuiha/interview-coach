@@ -7,6 +7,7 @@ import com.interviewcoach.position.domain.entity.Position;
 import com.interviewcoach.position.domain.repository.PositionRepository;
 import com.interviewcoach.resume.domain.entity.Resume;
 import com.interviewcoach.resume.domain.repository.ResumeRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,7 @@ public class InterviewLockCleanupRunner implements ApplicationRunner {
         log.info("[InterviewLockCleanup] 发现 {} 个进行中的面试，将标记为中断并释放锁定", activeInterviews.size());
         for (Interview interview : activeInterviews) {
             interview.setStatus(InterviewStatus.INTERRUPTED);
+            interview.setEndedAt(LocalDateTime.now());
             interviewRepository.save(interview);
 
             Resume resume = resumeRepository.findById(interview.getResumeId()).orElse(null);

@@ -19,6 +19,45 @@ public class MockLlmService implements LlmService {
             AgentType.COACH, AgentType.RESUME_ANALYSIS, AgentType.JD_ANALYSIS})
     public String chat(String systemPrompt, String userPrompt) {
         log.warn("[MockLlmService] LLM is disabled, returning mock JSON");
+        if (userPrompt != null
+                && userPrompt.contains("\"requiredSkills\"")
+                && userPrompt.contains("\"probingDirections\"")) {
+            return """
+                    {
+                      "basicInfo": {
+                        "title": "模拟岗位",
+                        "company": "",
+                        "location": "",
+                        "level": "",
+                        "salaryRange": ""
+                      },
+                      "requiredSkills": [
+                        {
+                          "skill": "岗位核心能力",
+                          "importance": "必须",
+                          "depth": "L2-L3"
+                        }
+                      ],
+                      "preferredSkills": [],
+                      "probingDirections": [
+                        {
+                          "direction": "岗位能力与项目经验",
+                          "priority": 1,
+                          "depthRange": "L2-L4",
+                          "sampleQuestions": [
+                            "请结合一个项目说明你如何解决与该岗位相关的实际问题"
+                          ]
+                        }
+                      ],
+                      "interviewFocus": [
+                        "岗位理解",
+                        "项目经验",
+                        "问题解决能力"
+                      ],
+                      "confidenceLevel": 0.5
+                    }
+                    """;
+        }
         if (userPrompt != null && userPrompt.contains("verificationPoints")) {
             return """
                     {

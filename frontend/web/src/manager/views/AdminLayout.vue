@@ -19,7 +19,7 @@
         </el-menu-item>
         <el-menu-item index="/admin/positions">
           <el-icon><OfficeBuilding /></el-icon>
-          <span>岗位审核</span>
+          <span>公共岗位</span>
         </el-menu-item>
         <el-menu-item index="/admin/questions">
           <el-icon><Document /></el-icon>

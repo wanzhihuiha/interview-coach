@@ -36,6 +36,15 @@ public class Interview {
     @Column(name = "position_id", nullable = false)
     private Long positionId;
 
+    @Column(name = "position_name_snapshot", nullable = false, length = 255)
+    private String positionNameSnapshot;
+
+    @Column(name = "company_name_snapshot", length = 255)
+    private String companyNameSnapshot;
+
+    @Column(name = "job_category_snapshot", nullable = false, length = 30)
+    private String jobCategorySnapshot;
+
     @Column(name = "user_profile", columnDefinition = "TEXT")
     private String userProfileSnapshot;
 

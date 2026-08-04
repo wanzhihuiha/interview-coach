@@ -1,1013 +1,407 @@
 # 岗位模块详细设计
 
-> 本文档记录岗位模块的详细设计，包括功能定义、数据结构、接口设计、业务流程等。
+> 本文档描述当前岗位生命周期实现。岗位解析采用“请求快速登记、MySQL 保存事实、Redis 公平排队、后台生成候选、人工确认发布”的模型。
 
----
+## 1. 模块边界
 
-## 1. 模块概述
+### 1.1 职责
 
-### 1.1 模块职责
+| 职责 | 当前实现 |
+|---|---|
+| JD 输入 | 支持粘贴文本或上传 PDF/TXT；前后端均校验，后端为最终判定方 |
+| 解析任务 | 每个岗位最多保留一条当前任务，只使用 `WAITING/RUNNING/SUCCEEDED/FAILED` |
+| 公平调度 | MySQL 保存任务事实；Redis 按参与者轮转，参与者内部按任务 ID 先进先出 |
+| 画像发布 | Worker 只生成候选画像；个人所有者或管理员确认后才写入正式画像 |
+| 生命周期 | 个人岗位与公共岗位分开管理，支持重新解析、归档和受保护的永久删除 |
+| 面试隔离 | 创建面试时保存岗位名称、公司、类别和正式画像快照，历史面试不再依赖岗位记录 |
 
-| 职责 | 说明 |
-|------|------|
-| **JD 上传** | 支持粘贴文本或上传文件形式提交 JD |
-| **JD 解析** | LLM 智能解析，提取岗位要求 |
-| **岗位画像生成** | 基于 JD 生成岗位考察重点 |
-| **JD 审核** | 管理员审核用户上传的 JD |
-| **公共岗位库** | 管理可复用的岗位模板 |
+### 1.2 代码落点
 
-### 1.2 模块位置
+| 层次 | 主要对象 | 职责 |
+|---|---|---|
+| HTTP | `PositionController`、`PositionAdminController` | 分离个人/公共入口和角色边界 |
+| 用例编排 | `PositionService`、`PositionSubmissionService`、`PositionLifecycleService` | 输入编排、提交、读取、确认、归档和删除 |
+| 状态事务 | `PositionAnalysisStateService` | 用短事务维护当前任务、候选和正式画像 |
+| 调度执行 | `PositionAnalysisDispatcher`、`PositionAnalysisWorker` | 取得容量、领取任务、创建虚拟线程并在事务外调用模型 |
+| Redis 投影 | `PositionAnalysisRedisQueue` | 参与者轮转、参与者内 FIFO、busy 标记和等待量估算 |
+| 文件提取 | `JdFileExtractionService`、`JdTextExtractor` | 受限临时文件、真实格式检查、文本提取和清理 |
+| 模型 | `JdAnalysisAgent` | 调用 `LlmService`，解析并校验候选画像；不生成成功兜底画像 |
+| 启动恢复 | `PositionAnalysisRecoveryRunner`、`PositionAnalysisRecoveryService` | 收口遗留 `RUNNING`，重建 Redis 后再开放调度 |
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  岗位模块 (position-module)                     │
-├─────────────────────────────────────────────────────────────┤
-│  Controller: PositionController, JDController              │
-│  Service: PositionService, JDService, AuditService       │
-│  Agent: JDAgent                                          │
-│  Tools: JDParserTool, ProfileGenTool                    │
-│  Repository: PositionRepository, AuditLogRepository       │
-└─────────────────────────────────────────────────────────────┘
-```
+### 1.3 不在本模块实现
 
-### 1.3 模块依赖
+- 不保存解析任务历史，不增加 `SUPERSEDED`、`CANCELLING`、`CANCELLED`、`TIMED_OUT` 或 `INTERRUPTED` 状态。
+- 不使用 MQ、Outbox 或持续扫描数据库作为正常调度热路径。
+- 不实现多实例调度租约、跨实例总并发、CPA 多账号/Key 路由或底层 HTTP 取消。
+- 不恢复归档岗位，不把个人岗位转换为公共岗位。
+- 不回填或兼容旧开发数据；V4 执行前应清理无需保留的数据或重建开发库。
 
-| 依赖模块 | 说明 |
-|---------|------|
-| 用户模块 | 管理员身份校验、数据隔离 |
-| 基础设施模块 | 审计 Tool、持久化 Tool |
-| AI 服务层 | LLM 调用（Spring AI Alibaba） |
+## 2. 核心业务事实
 
----
+### 2.1 岗位、任务和画像相互独立
 
-## 2. 数据模型
+页面和服务端必须同时判断两个事实：
 
-### 2.1 实体设计
+1. `profileUsable`：`position_profile` 是否存在，决定岗位能否创建新面试。
+2. `latestTaskStatus`：当前解析任务走到哪一步，决定是否继续轮询、确认或重试。
 
-#### Position（岗位）
+重新解析不会删除正式画像。新任务处于 `WAITING`、`RUNNING` 或 `FAILED` 时，旧正式画像仍可用于面试；只有候选被确认后才替换正式画像。
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | Long | PK, AUTO | 岗位ID |
-| userId | Long | FK, INDEX | 上传用户ID（null=公共岗位） |
-| positionName | String | NOT NULL | 岗位名称 |
-| companyName | String | | 公司名称（可脱敏） |
-| location | String | | 工作地点 |
-| salaryRange | String | | 薪资范围 |
-| jobCategory | String | NOT NULL | 岗位大类：TECH/PRODUCT/DESIGN等 |
-| level | String | | 岗位等级：JUNIOR/MID/SENIOR/EXPERT |
-| jdContent | Text | | JD 原文内容 |
-| parseStatus | Enum | NOT NULL | 解析状态 |
-| auditStatus | Enum | NOT NULL | 审核状态 |
-| auditRemark | String | | 审核备注 |
-| auditorId | Long | FK | 审核人ID |
-| auditedAt | DateTime | | 审核时间 |
-| isPublic | Boolean | DEFAULT false | 是否公共岗位 |
-| createdAt | DateTime | NOT NULL | 创建时间 |
-| updatedAt | DateTime | NOT NULL | 更新时间 |
+### 2.2 当前任务状态
 
-#### PositionProfile（岗位画像）
+| 状态 | 含义 | 允许的后续动作 |
+|---|---|---|
+| 无任务 | 没有当前候选或失败记录 | 活动且可管理时可发起重新解析 |
+| `WAITING` | 已落库，等待公平调度 | 轮询；归档会删除任务 |
+| `RUNNING` | 已取得本地容量并被数据库领取 | 轮询；归档保留任务到远程调用真实结束 |
+| `SUCCEEDED` | 候选画像已保存，等待确认 | 携带精确 `taskId` 确认，或重新解析替换当前任务 |
+| `FAILED` | 本轮失败，错误原因已脱敏保存 | 重新解析替换当前任务 |
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| id | Long | PK, AUTO | 画像ID |
-| positionId | Long | FK, UNIQUE, NOT NULL | 岗位ID |
-| userId | Long | FK | 用户ID（冗余） |
-| profileData | JSON | NOT NULL | 画像数据（JSON） |
-| createdAt | DateTime | NOT NULL | 创建时间 |
-| updatedAt | DateTime | NOT NULL | 更新时间 |
+状态流转只发生为：
 
-#### PositionParseStatus（岗位解析状态枚举）
-
-```java
-public enum PositionParseStatus {
-    PENDING(0),        // 待解析
-    PARSING(1),        // 解析中
-    PENDING_CONFIRM(2),// 待确认
-    CONFIRMED(3),      // 已确认
-    PARSE_FAILED(4)    // 解析失败
-}
+```text
+无任务 -> WAITING -> RUNNING -> SUCCEEDED
+                         \-> FAILED
+SUCCEEDED --确认--> 删除任务 + 写入/替换正式画像
+SUCCEEDED/FAILED --重新解析--> 删除旧任务 -> 新 WAITING
 ```
 
-#### PositionAuditStatus（岗位审核状态枚举）
+归档和删除是生命周期动作，不是任务状态：
 
-```java
-public enum PositionAuditStatus {
-    PENDING(0),   // 待审核
-    APPROVED(1),  // 审核通过
-    REJECTED(2)   // 审核拒绝
-}
-```
+- 归档 `WAITING/SUCCEEDED/FAILED` 岗位时直接删除当前任务。
+- 归档 `RUNNING` 岗位时保留任务；Worker 真正结束后丢弃结果并删除任务。
+- 确认成功后删除当前任务，不保留“已确认任务”。
 
-> **说明**：画像内容统一存储在 `profileData` JSON 中，避免为每个字段单独建列，与数据库设计保持一致。
+## 3. 数据模型
 
-### 2.2 画像数据结构
+### 3.1 `position`
 
-#### PositionProfileData（岗位画像 JSON 结构）
+| 字段 | 用途 |
+|---|---|
+| `id` | 岗位 ID |
+| `user_id` | 个人岗位所有者；公共岗位为 `NULL` |
+| `position_name/company_name/location/salary_range` | 岗位基础信息 |
+| `job_category/level` | 岗位类别与等级；确认候选时可同步候选中的等级 |
+| `jd_content` | 规范化后的 JD 文本，不保存上传原文件路径 |
+| `is_public` | `false` 为个人岗位，`true` 为管理员公共岗位 |
+| `archived_at` | 非空表示已归档 |
+| `lock_interview_id` | 个人岗位进行中面试的精确锁；公共岗位不使用全局面试锁 |
+| `parse_status/audit_*` | V1 遗留列，仅为结构兼容保留；新 API、发布和权限逻辑不得读取 |
 
-```json
-{
-  "basicInfo": {
-    "title": "Java高级工程师",
-    "company": "某互联网公司",
-    "location": "某城市",
-    "level": "中级",
-    "salaryRange": "25k-40k"
-  },
-  "requiredSkills": [
-    { "skill": "Java", "importance": "必须", "depth": "L3-L4" },
-    { "skill": "Spring", "importance": "必须", "depth": "L3-L4" },
-    { "skill": "MySQL", "importance": "必须", "depth": "L3" }
-  ],
-  "preferredSkills": [
-    { "skill": "Redis", "importance": "加分", "depth": "L2-L3" },
-    { "skill": "分布式", "importance": "加分", "depth": "L3" }
-  ],
-  "probingDirections": [
-    {
-      "direction": "并发编程",
-      "priority": 1,
-      "depthRange": "L2-L4",
-      "sampleQuestions": ["synchronized原理", "JUC并发包"]
-    },
-    {
-      "direction": "JVM",
-      "priority": 2,
-      "depthRange": "L3-L4",
-      "sampleQuestions": ["垃圾回收", "类加载机制"]
-    }
-  ],
-  "interviewFocus": [
-    "技术深度",
-    "源码理解",
-    "问题解决能力"
-  ],
-  "confidenceLevel": 0.9
-}
-```
+### 3.2 `position_analysis_task`
 
----
+每个岗位最多一行，由 `uk_position_analysis_task_position(position_id)` 保证。
 
-## 3. 功能定义
+| 字段 | 用途 |
+|---|---|
+| `id` | 当前任务 ID，同时作为参与者内部 FIFO 和启动恢复的稳定排序号 |
+| `position_id` | 当前任务所属岗位，唯一 |
+| `request_user_id` | 发起人审计信息，不作为资源授权依据 |
+| `queue_owner` | 服务端生成：个人为 `USER:<userId>`，所有公共任务统一为 `PUBLIC` |
+| `status` | 四状态之一 |
+| `candidate_profile_data` | 仅 `SUCCEEDED` 使用的候选画像 JSON |
+| `error_code/error_message` | `FAILED` 的稳定分类和脱敏说明 |
+| `started_at/finished_at` | 实际领取和终态时间 |
+| `created_at/updated_at` | 创建和更新时间 |
 
-### 3.1 JD 上传
+任务表没有 generation、queueTicket、画像版本、取消标记、deadline、执行实例或任务历史字段。
 
-| 项目 | 说明 |
-|------|------|
-| **功能描述** | 用户提交 JD（粘贴文本或上传文件） |
-| **输入** | JD 文本 / 文件、岗位名称 |
-| **输出** | 岗位ID、parseStatus=PENDING、auditStatus=PENDING |
-| **流程** | 保存 JD → 创建岗位记录 → 异步触发解析 |
+### 3.3 `position_profile`
 
-### 3.2 JD 解析
+`position_id` 唯一，只保存已确认的正式画像。候选画像只在当前任务表中；公共画像的 `user_id` 为 `NULL`，不能用该字段解释管理员所有权。
 
-| 项目 | 说明 |
-|------|------|
-| **功能描述** | LLM 智能解析 JD 内容 |
-| **输入** | JD 文本 |
-| **输出** | 结构化 JSON（技能要求、考察重点等） |
-| **流程** | 提取文本 → 脱敏 → 缓存检查 → LLM解析 → 保存解析结果 → 更新状态 |
-| **异步** | 解析为异步操作，通过状态轮询或回调获取结果 |
-| **缓存策略** | 相同 JD 文本 MD5 命中缓存时直接返回缓存结果 |
-| **降级策略** | LLM 超时/失败时返回基础岗位画像，允许用户手动补充 |
+### 3.4 `interview` 岗位快照
 
-### 3.2.1 缓存设计
+V4 新增：
 
-| 项目 | 说明 |
-|------|------|
-| **缓存介质** | Redis |
-| **缓存键** | `position:parse:{md5(jdText)}` |
-| **缓存值** | 解析后的 `PositionProfileData` JSON |
-| **过期时间** | 7 天 |
-| **MD5 生成规则** | 对脱敏后的 JD 纯文本计算 MD5，忽略前后空白 |
-| **缓存刷新** | 用户触发重新解析时，先删除旧缓存再重新计算 |
+- `position_name_snapshot`：岗位名称，非空。
+- `company_name_snapshot`：公司名称，可空。
+- `job_category_snapshot`：岗位类别，非空。
+- 既有 `position_profile`：创建面试时的正式岗位画像 JSON。
 
-### 3.2.2 降级设计
+面试准备事务只有在活动个人岗位属于当前用户，或公共岗位已确认且未归档时才创建快照。面试运行、详情、报告、Coordinator 和成长方案读取快照，不再回查实时岗位名称、公司、类别或画像。
 
-| 场景 | 降级行为 |
-|------|---------|
-| **LLM 调用超时** | 生成基础岗位画像，状态变为 `PENDING_CONFIRM`，前端提示手动补充 |
-| **LLM 返回非 JSON** | 同上 |
-| **JSON Schema 校验失败** | 同上 |
-| **文本提取失败** | 状态变为 `PARSE_FAILED`，允许用户重新上传或手动填写 |
+## 4. 创建、上传和提交限制
 
-**基础岗位画像内容**：
-- `basicInfo` 仅包含岗位名称
-- `requiredSkills` 为空列表
-- `preferredSkills` 为空列表
-- `probingDirections` 基于岗位大类默认方向
-- `interviewFocus` 基于岗位大类默认值
-- `confidenceLevel` 为 0
-- 前端提示"解析失败，请手动补充岗位要求"
+### 4.1 输入校验
 
-### 3.3 岗位画像生成
+- 粘贴和文件文本统一去除开头 BOM、统一换行、清理首尾空白。
+- 规范化后必须包含 `1..2000` 个 Unicode code point；模型输出不受此限制。
+- 上传实际大小上限为 10 MiB，仅支持 PDF/TXT。
+- 前端校验用于尽早提示；后端重新检查实际字节、内容特征、编码、PDF 页数和提取结果。
 
-| 项目 | 说明 |
-|------|------|
-| **功能描述** | 基于 JD 解析结果生成完整岗位画像 |
-| **输入** | 解析后的 JD JSON |
-| **输出** | PositionProfileData 结构 |
+### 4.2 文件提取和清理
 
-### 3.4 JD 审核
+1. 服务端在专用临时目录创建带 `position-jd-` 前缀的随机文件名。
+2. 请求线程流式复制并执行实际字节上限，不信任客户端文件名或 `Content-Length`。
+3. 有界提取执行器接管后成为唯一清理责任人；提交执行器失败前仍由请求线程清理。
+4. TXT 使用严格 UTF-8 解码，拒绝 PDF 签名和二进制控制字符。
+5. PDF 检查前 1024 字节内的 `%PDF-` 签名、加密状态和最多 20 页，并使用 PDFBox 提取。
+6. 请求等待超时或中断只停止等待，不能提前释放仍在执行的提取槽位；Worker 在 `finally` 删除临时文件。
+7. 启动时只清理本模块目录内、带固定前缀且超过 `orphan-max-age` 的孤儿文件。
 
-| 项目 | 说明 |
-|------|------|
-| **功能描述** | 管理员审核用户上传的 JD |
-| **输入** | 岗位ID、审核结果（通过/拒绝）、备注 |
-| **输出** | 审核成功 |
-| **权限** | 仅系统管理员可操作 |
+上传原文件不进入岗位持久卷，也不在岗位表保存路径。
 
-### 3.5 公共岗位库
+### 4.3 个人提交
 
-| 功能 | 说明 |
-|------|------|
-| 创建公共岗位 | 管理员创建公共岗位模板 |
-| 查询公共岗位 | 用户浏览公共岗位库 |
-| 申请使用 | 用户申请使用公共岗位到自己面试 |
-| 管理公共岗位 | 管理员增删改公共岗位 |
+个人新建和重新解析共享频控。事务第一条数据库读取锁定 `sys_user` 行，然后检查：
 
-### 3.6 首次体验优化
+- 新建时未归档个人岗位少于 5 个；重新解析不重复检查岗位数量。
+- `queue_owner=USER:<userId>` 的 `WAITING` 任务少于 5 个。
+- 距上次成功提交不少于 5 分钟。
+- 重新解析目标属于本人、未归档，且当前任务不是 `WAITING/RUNNING`。
 
-| 优化项 | 说明 |
-|--------|------|
-| 公共岗位模板 | 预置热门岗位模板（Java、前端、产品等），用户可直接选择 |
-| 示例 JD | 提供示例 JD，帮助用户理解如何粘贴 |
-| 快速开始 | 允许从公共岗位一键开始面试，跳过审核等待 |
-| 跳过确认 | 在明确提示下，允许用户跳过岗位确认直接开始面试 |
+事务成功写入岗位/任务后才更新时间字段；输入、文件、事务失败均不消耗频控。个人提交不使用 Redis 锁。
 
----
+### 4.4 公共提交
 
-## 4. 接口设计
+管理员入口先取得固定 Redisson `PUBLIC` 提交锁，再在短事务中检查公共 `WAITING` 数少于配置上限（默认 20）并写入公共岗位和任务。Redis 不可用或锁未取得时失败关闭；公共任务不占管理员的个人岗位数、个人等待数或 5 分钟频控。
 
-### 4.1 接口一览
+### 4.5 事务后入队
 
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | /api/v1/positions | 创建岗位 | 是 |
-| POST | /api/v1/positions/upload | 上传 JD 文件 | 是 |
-| GET | /api/v1/positions | 获取岗位列表 | 是 |
-| GET | /api/v1/positions/{id} | 获取岗位详情 | 是 |
-| GET | /api/v1/positions/{id}/profile | 获取岗位画像 | 是 |
-| PUT | /api/v1/positions/{id}/confirm | 确认岗位解析结果 | 是 |
-| PUT | /api/v1/positions/{id}/reparse | 重新解析 JD | 是 |
-| DELETE | /api/v1/positions/{id} | 删除岗位 | 是 |
-| PUT | /api/v1/admin/positions/{id}/audit | 审核岗位 | 是（管理员） |
-| GET | /api/v1/positions/public | 获取公共岗位列表 | 是 |
-| POST | /api/v1/admin/positions | 创建公共岗位 | 是（管理员） |
-| PUT | /api/v1/admin/positions/{id} | 更新公共岗位 | 是（管理员） |
-| DELETE | /api/v1/admin/positions/{id} | 删除公共岗位 | 是（管理员） |
+数据库提交后发布轻量事件，有界入队执行器将 `taskId + queueOwner` 幂等投影到 Redis。入队失败会有限重试；耗尽后保留 MySQL `WAITING` 并告警，不回滚已经成功的 HTTP 提交。当前实现的兜底重建发生在下次应用启动，不承诺运行中持续扫描 MySQL 修复投影。
 
-### 4.2 接口详情
+## 5. Redis 公平队列和调度
 
-#### POST /api/v1/positions（创建岗位）
+### 5.1 参与者
 
-**请求**：
-```json
-{
-  "positionName": "Java高级工程师",
-  "companyName": "某互联网公司",
-  "location": "北京",
-  "salaryRange": "25k-40k",
-  "jobCategory": "TECH",
-  "jdContent": "负责公司核心系统开发，要求熟悉Java、Spring、MySQL..."
-}
-```
+- 个人：`USER:<userId>`。
+- 公共：全部公共任务共享一个 `PUBLIC` 参与者，因此每轮最多运行一个公共任务。
+- 每个参与者的任务 ZSet 以 `taskId` 为 score/member，保证参与者内部 FIFO。
+- 全局 ready List 保存参与者轮转顺序；ready Set 防重复；busy Hash 保证一个参与者同时最多运行一个任务。
 
-**响应**（200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "positionId": 1,
-    "positionName": "Java高级工程师",
-    "parseStatus": "PENDING",
-    "auditStatus": "PENDING"
-  }
-}
-```
+示例：A 有 A1/A2，B 有 B1，公共有 P1/P2，则可形成 `A1 -> B1 -> P1 -> A2 -> P2`；新参与者加入当时队尾。
 
-**错误码**：
-| code | message | 说明 |
-|------|---------|------|
-| 5001 | 岗位名称不能为空 | 校验失败 |
-| 5002 | JD描述不能为空 | 校验失败 |
+### 5.2 领取顺序
 
----
+调度器由单个平台线程串行执行：
 
-#### POST /api/v1/positions/upload（上传 JD 文件）
+1. `Semaphore.tryAcquire()` 取得本机岗位解析容量；没有容量时不取队列、不访问数据库、不创建线程。
+2. Redis Lua 原子弹出 ready 参与者的最小 `taskId`，并在 busy Hash 记录预留。
+3. MySQL 短事务按 `Position -> PositionAnalysisTask` 锁顺序核对岗位存在、未归档、queue owner 正确且任务仍为 `WAITING`，再条件更新为 `RUNNING`。
+4. DB 未领取到任务时，清理或恢复 Redis 预留并归还容量。
+5. 领取成功后才向专用虚拟线程执行器提交 Worker。
+6. 虚拟线程提交失败时把 `RUNNING` 收口为 `FAILED`，再完成 Redis 和容量清理。
 
-**请求**：multipart/form-data
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| file | File | 是 | JD 文件 |
-| positionName | String | 是 | 岗位名称 |
+### 5.3 Worker 和结果写回
 
-**响应**（200）：
+- Worker 只携带数据库读取出的不可变 `AnalysisInput`，模型调用位于事务外。
+- 岗位模块调用 `LlmService.chat`，不自行建立总 deadline 字段；最终调用上限由共享 CPA/LLM 层契约提供。
+- 空响应、非法 JSON、画像必需结构缺失、模型异常或超时都写成 `FAILED`，不创建基础兜底画像冒充成功。
+- 成功或失败写回再次锁定当前 `Position -> Task`，只接受同一 `taskId` 且源状态仍为 `RUNNING`。
+- 岗位已归档时删除任务并丢弃迟到结果；不会覆盖正式画像。
+- 只有模型调用、状态收口和必要清理真实结束后，才清除 Redis busy、让仍有等待任务的参与者回到队尾、释放本地容量并唤醒下一轮。
+- 若数据库终态无法确认，保留 Redis busy，等待下次启动恢复，避免同一参与者继续领取。
+
+`queueAhead` 由当前 busy 数、ready 位置和参与者内 rank 估算，只是页面快照，不承诺完成时间；Redis 不可用时状态接口仍返回 MySQL 状态，`queueAhead` 可为空。
+
+## 6. 确认、重新解析、归档和删除
+
+### 6.1 确认候选
+
+个人确认必须命中本人活动个人岗位；公共确认必须通过管理员入口并命中活动公共岗位。短事务要求：
+
+- 请求 `taskId` 与岗位当前任务 ID 完全一致。
+- 当前任务为 `SUCCEEDED`，候选 JSON 存在。
+- 确认画像可以序列化。
+
+随后写入或替换 `position_profile`，同步岗位等级，并删除当前任务。公共岗位从正式画像写入成功起立即对普通用户公开，不存在额外审核状态。
+
+### 6.2 重新解析
+
+- 只允许当前任务为空、`SUCCEEDED` 或 `FAILED`。
+- 事务内删除旧终态任务并 `flush()`，再创建新的 `WAITING`，以数据库唯一约束保证一岗位一任务。
+- 不保存旧任务、旧候选或 generation；旧正式画像保持可用。
+- 个人重新解析继续受等待数和 5 分钟限制，但不受“已有 5 个岗位”误拦；公共重新解析继续受 `PUBLIC` 提交锁和公共等待上限保护。
+
+### 6.3 归档
+
+- 个人归档先锁用户行再锁本人岗位；公共归档只允许管理员接口。
+- 重复归档幂等成功。
+- 立即写 `archived_at`，个人岗位立即释放未归档数量名额并禁止新面试。
+- `WAITING/SUCCEEDED/FAILED` 任务直接删除；`WAITING` 的 Redis 投影在事务提交后异步移除。
+- `RUNNING` 任务保持不变，不设置取消标记；Worker 返回后发现岗位归档，删除任务并丢弃结果，再释放容量。
+- 正式画像保留，历史面试继续使用快照；本阶段不提供恢复使用。
+
+### 6.4 永久删除
+
+永久删除必须同时满足：
+
+- 岗位已归档。
+- 当前任务不是 `RUNNING`。
+- 不存在该岗位的 `IN_PROGRESS` 面试。
+
+事务按 `Position -> Task -> Profile` 删除当前任务、正式画像和岗位，不删除任何历史 `interview`。已结束面试不阻止删除，因为运行、详情、报告和成长方案均读取面试快照。永久删除不可恢复。
+
+## 7. 启动恢复
+
+启动期间调度器保持关闭：
+
+1. 按任务 ID 升序读取所有当前任务。
+2. 岗位不存在或已归档：删除任务。
+3. 遗留 `RUNNING`：改为 `FAILED`，错误码 `APPLICATION_RESTARTED`，不自动重跑。
+4. `WAITING`：核对 `queue_owner`；无效则改为 `FAILED`，有效则加入恢复快照。
+5. 清空本 Goal 的 Redis ready、busy、owner 索引和参与者任务集合。
+6. 将恢复快照与启动期间到达的本地 pending 入队事件合并，按 `taskId` 升序重建。
+7. Redis 重建成功后才启动调度器。
+
+启动恢复失败会阻止应用完成该 Runner，不允许在未知队列状态下开放岗位调度。当前没有 Redis 重连监听或周期性数据库补扫；运行中投影失败依赖告警、惰性清理和下次启动重建。
+
+## 8. 权限和可见性
+
+| 场景 | 规则 |
+|---|---|
+| 个人岗位 | 只有所有者可查看任务/候选、确认、重解析、归档和永久删除；他人资源按不存在处理 |
+| 公共岗位管理 | `/api/v1/admin/positions/**` 类级要求 `ADMIN`，服务/查询再次限制 `is_public=true` |
+| 普通用户公共读取 | 只返回未归档且正式画像存在的公共岗位，不暴露任务、候选、失败详情或管理员发起人 |
+| 面试可选岗位 | `/positions/accessible` 只返回本人活动且正式画像可用的个人岗位，以及已发布公共岗位 |
+| 授权依据 | `queue_owner`、`request_user_id` 和 `PositionProfile.userId` 都不是公共资源授权依据 |
+
+日志只记录任务 ID、阶段、失败分类、异常类型和耗时，不记录 JD 正文、模型响应或完整候选画像。
+
+## 9. HTTP 接口
+
+### 9.1 个人与公共只读接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/v1/positions` | 粘贴 JD 创建个人岗位和 `WAITING` 任务 |
+| `POST` | `/api/v1/positions/upload` | 上传 PDF/TXT 创建个人岗位和任务 |
+| `GET` | `/api/v1/positions?archived=false|true` | 本人个人岗位活动/归档列表 |
+| `GET` | `/api/v1/positions/public` | 已发布公共岗位列表 |
+| `GET` | `/api/v1/positions/accessible` | 可创建面试的个人+公共岗位 |
+| `GET` | `/api/v1/positions/{id}` | 本人个人岗位，或已发布公共岗位详情 |
+| `GET` | `/api/v1/positions/{id}/profile` | 本人可见正式+候选；普通公共读取只见正式画像 |
+| `GET` | `/api/v1/positions/{id}/analysis-status` | 仅本人个人岗位的轻量轮询状态 |
+| `PUT` | `/api/v1/positions/{id}/confirm` | 所有者携带当前 `taskId` 确认候选 |
+| `PUT` | `/api/v1/positions/{id}/reparse` | 所有者重新解析 |
+| `PUT` | `/api/v1/positions/{id}/archive` | 幂等归档本人岗位 |
+| `DELETE` | `/api/v1/positions/{id}` | 永久删除本人已归档岗位 |
+
+### 9.2 管理员公共岗位接口
+
+`/api/v1/admin/positions` 提供与个人生命周期对应的创建、上传、列表、详情、画像、轮询、确认、重新解析、归档和永久删除接口。管理员入口不提供个人岗位审核或个人转公共能力。
+
+### 9.3 关键契约
+
+创建成功：
+
 ```json
 {
   "code": 0,
   "message": "success",
   "data": {
-    "positionId": 1,
-    "positionName": "Java高级工程师",
-    "parseStatus": "PENDING",
-    "auditStatus": "PENDING"
+    "positionId": 101,
+    "positionName": "Java 后端工程师",
+    "taskId": 7001,
+    "latestTaskStatus": "WAITING"
   }
 }
 ```
 
----
+轮询状态：
 
-#### GET /api/v1/positions（获取岗位列表）
-
-**请求参数**：
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| page | int | 否 | 页码（默认0） |
-| size | int | 否 | 每页条数（默认10） |
-| parseStatus | String | 否 | 按解析状态筛选 |
-| auditStatus | String | 否 | 按审核状态筛选 |
-
-**响应**（200）：
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {
-    "content": [
-      {
-        "positionId": 1,
-        "positionName": "Java高级工程师",
-        "companyName": "某互联网公司",
-        "parseStatus": "CONFIRMED",
-        "auditStatus": "APPROVED",
-        "createdAt": "2024-01-15T10:30:00",
-        "updatedAt": "2024-01-15T10:31:00"
-      }
-    ],
-    "totalElements": 10,
-    "totalPages": 1,
-    "currentPage": 0
-  }
+  "positionId": 101,
+  "taskId": 7001,
+  "latestTaskStatus": "WAITING",
+  "latestTaskStatusLabel": "排队中",
+  "queueAhead": 3,
+  "profileUsable": true,
+  "canConfirm": false,
+  "canRetry": false,
+  "archived": false
 }
 ```
 
----
+确认请求：
 
-#### GET /api/v1/positions/{id}（获取岗位详情）
-
-**响应**（200）：
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {
-    "positionId": 1,
-    "positionName": "Java高级工程师",
-    "companyName": "某互联网公司",
-    "location": "北京",
-    "salaryRange": "25k-40k",
-    "jobCategory": "TECH",
-    "jdContent": "负责公司核心系统开发...",
-    "parseStatus": "CONFIRMED",
-    "auditStatus": "APPROVED",
-    "createdAt": "2024-01-15T10:30:00",
-    "updatedAt": "2024-01-15T10:31:00",
-    "auditedAt": "2024-01-15T11:00:00"
-  }
-}
-```
-
-**错误码**：
-| code | message | 说明 |
-|------|---------|------|
-| 5101 | 岗位不存在 | 岗位ID不存在 |
-| 5102 | 无权访问 | 该岗位不属于当前用户 |
-
----
-
-#### GET /api/v1/positions/{id}/profile（获取岗位画像）
-
-**响应**（200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "profileId": 1,
-    "positionId": 1,
-    "profile": {
-      "basicInfo": {
-        "title": "Java高级工程师",
-        "level": "中级",
-        "salaryRange": "25k-40k",
-        "location": "北京"
-      },
-      "requiredSkills": [
-        { "skill": "Java", "importance": "必须", "depth": "L3-L4" }
-      ],
-      "preferredSkills": [...],
-      "probingDirections": [...],
-      "interviewFocus": ["技术深度", "源码理解", "问题解决能力"]
-    },
-    "parseStatus": "CONFIRMED"
-  }
-}
-```
-
----
-
-#### PUT /api/v1/positions/{id}/confirm（确认岗位解析结果）
-
-**请求**：
-```json
-{
+  "taskId": 7001,
   "profile": {
-    "requiredSkills": [...],
-    "preferredSkills": [...],
-    "probingDirections": [...],
-    "level": "中级"
+    "basicInfo": { "title": "Java 后端工程师", "level": "高级" },
+    "requiredSkills": [],
+    "preferredSkills": [],
+    "probingDirections": [],
+    "interviewFocus": ["系统设计"],
+    "confidenceLevel": 0.9
   }
 }
 ```
 
-**响应**（200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": null
-}
-```
+公共响应中的任务相关字段为空，普通用户不能据此推断公共候选或失败状态。
 
-**错误码**：
-| code | message | 说明 |
-|------|---------|------|
-| 5101 | 岗位不存在 | 岗位ID不存在 |
-| 5103 | 岗位状态错误 | 只有PENDING_CONFIRM状态可确认 |
-| 5105 | 画像数据无效 | JSON格式错误或必填字段缺失 |
+## 10. 错误码
 
----
+| 范围 | 代表错误 |
+|---|---|
+| `5001..5005` | 岗位名/JD/分页/画像输入错误 |
+| `5101..5115` | 岗位不存在、归属、限额、频控、任务过期、归档、基础设施、运行任务和进行中面试守卫 |
+| `5201..5209` | 文件读取、大小、类型/内容、PDF 页数/加密、提取繁忙/超时/中断 |
 
-#### PUT /api/v1/positions/{id}/reparse（重新解析 JD）
+任务表的失败分类使用稳定字符串，例如 `LLM_TIMEOUT`、`LLM_REQUEST_FAILED`、`LLM_EMPTY_RESPONSE`、`LLM_INVALID_JSON`、`LLM_INVALID_PROFILE`、`WORKER_SUBMISSION_FAILED`、`APPLICATION_RESTARTED` 和 `UNEXPECTED_ERROR`。页面只展示脱敏后的安全说明。
 
-**响应**（200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "positionId": 1,
-    "parseStatus": "PENDING"
-  }
-}
-```
-
-**错误码**：
-| code | message | 说明 |
-|------|---------|------|
-| 5101 | 岗位不存在 | 岗位ID不存在 |
-| 5102 | 无权访问 | 该岗位不属于当前用户 |
-| 5103 | 岗位状态错误 | 当前状态不支持重新解析 |
-
----
-
-#### PUT /api/v1/admin/positions/{id}/audit（审核岗位）
-
-**请求**：
-```json
-{
-  "status": "APPROVED",
-  "remark": "岗位信息完整，通过"
-}
-```
-
-**响应**（200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": null
-}
-```
-
-**错误码**：
-| code | message | 说明 |
-|------|---------|------|
-| 5103 | 只有待审核状态可审核 | 状态错误 |
-| 5104 | 无权操作 | 非管理员无权审核 |
-
----
-
-#### GET /api/v1/positions/public（获取公共岗位列表）
-
-**响应**（200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "content": [
-      {
-        "positionId": 100,
-        "positionName": "Java工程师（标准模板）",
-        "companyName": "公共岗位",
-        "level": "中级",
-        "probeCount": 5
-      }
-    ],
-    "totalElements": 20
-  }
-}
-```
-
----
-
-## 5. 业务流程
-
-### 5.1 JD 上传流程
-
-```mermaid
-flowchart TD
-    Start([开始上传])
-    CheckInput{输入校验}
-    SaveJD[保存JD内容]
-    CreateRecord[创建岗位记录]
-    UpdateStatus[更新 parseStatus 为 PENDING]
-    AsyncTrigger[异步触发解析]
-    ReturnSuccess[返回成功]
-    ReturnError[返回错误]
-
-    Start --> CheckInput
-
-    CheckInput -->|通过| SaveJD
-    CheckInput -->|失败<br/>5001 名称为空| ReturnError
-    CheckInput -->|失败<br/>5002 描述为空| ReturnError
-
-    SaveJD --> CreateRecord
-    CreateRecord --> UpdateStatus
-    UpdateStatus --> AsyncTrigger
-    AsyncTrigger --> ReturnSuccess
-```
-
-**分支条件详情**：
-
-| 步骤 | 条件 | 结果 | 错误码 |
-|------|------|------|--------|
-| **输入校验** | positionName 为空 | 返回错误 | 5001 |
-| | jdContent 为空 | 返回错误 | 5002 |
-
----
-
-### 5.2 JD 解析流程（异步）
-
-```mermaid
-flowchart TD
-    Start([开始解析])
-    UpdateParsing[更新 parseStatus 为 PARSING]
-    ExtractText[提取JD文本]
-    CheckText{文本提取成功?}
-    CheckCache{缓存命中?}
-    ReturnCache[返回缓存结果]
-    Desensitize[数据脱敏]
-    CallLLM[调用LLM解析]
-    LLMResponse{LLM响应成功?}
-    ParseJson[解析LLM响应JSON]
-    JsonValid{JSON 有效?}
-    GenerateProfile[生成岗位画像]
-    FallbackProfile[生成基础岗位画像]
-    SaveResult[保存解析结果]
-    SaveCache[写入缓存]
-    UpdatePending[更新 parseStatus 为 PENDING_CONFIRM]
-    ReturnSuccess[解析完成]
-    UpdateFailed[更新 parseStatus 为 PARSE_FAILED]
-    ReturnError[返回错误]
-
-    Start --> UpdateParsing
-    UpdateParsing --> ExtractText
-    ExtractText --> CheckText
-
-    CheckText -->|成功| CheckCache
-    CheckText -->|失败| UpdateFailed
-    UpdateFailed --> ReturnError
-
-    CheckCache -->|命中| ReturnCache
-    CheckCache -->|未命中| Desensitize
-    ReturnCache --> UpdatePending
-
-    Desensitize --> CallLLM
-    CallLLM --> LLMResponse
-
-    LLMResponse -->|成功| ParseJson
-    LLMResponse -->|失败/超时| FallbackProfile
-
-    ParseJson -->|成功| JsonValid
-    ParseJson -->|失败| FallbackProfile
-
-    JsonValid -->|通过| GenerateProfile
-    JsonValid -->|失败| FallbackProfile
-
-    GenerateProfile --> SaveResult
-    FallbackProfile --> SaveResult
-    SaveResult --> SaveCache
-    SaveCache --> UpdatePending
-    UpdatePending --> ReturnSuccess
-```
-
-**分支条件详情**：
-
-| 步骤 | 条件 | 结果 | 错误码 |
-|------|------|------|--------|
-| **文本提取** | 提取失败 | 标记 PARSE_FAILED | - |
-| **缓存检查** | MD5 命中缓存 | 直接返回缓存结果 | - |
-| **LLM调用** | 调用失败/超时 | 生成基础画像，状态变为 PENDING_CONFIRM | - |
-| **JSON解析** | LLM返回非JSON格式 | 生成基础画像，状态变为 PENDING_CONFIRM | - |
-| **解析成功** | 所有步骤成功 | 状态变为 PENDING_CONFIRM | - |
-
-**基础岗位画像内容**：
-- `basicInfo` 仅包含岗位名称
-- `requiredSkills` 为空列表
-- `preferredSkills` 为空列表
-- `probingDirections` 基于岗位大类默认方向
-- `interviewFocus` 基于岗位大类默认值
-- `confidenceLevel` 为 0
-- 前端提示"解析失败，请手动补充岗位要求"
-
----
-
-### 5.3 JD 审核流程
-
-```mermaid
-flowchart TD
-    Start([开始审核])
-    CheckAdmin{管理员校验}
-    FindPosition{查询岗位}
-    CheckStatus{auditStatus 检查}
-    UpdateStatus[更新 auditStatus 为 APPROVED/REJECTED]
-    SaveRemark[保存审核备注]
-    RecordAudit[记录审核日志]
-    ReturnSuccess[返回成功]
-    ReturnError[返回错误]
-
-    Start --> CheckAdmin
-
-    CheckAdmin -->|是管理员| FindPosition
-    CheckAdmin -->|非管理员<br/>5104 无权操作| ReturnError
-
-    FindPosition -->|存在| CheckStatus
-    FindPosition -->|不存在<br/>5101 岗位不存在| ReturnError
-
-    CheckStatus -->|PENDING| UpdateStatus
-    CheckStatus -->|非PENDING<br/>5103 状态错误| ReturnError
-
-    UpdateStatus --> SaveRemark
-    SaveRemark --> RecordAudit
-    RecordAudit --> ReturnSuccess
-```
-
-**分支条件详情**：
-
-| 步骤 | 条件 | 结果 | 错误码 |
-|------|------|------|--------|
-| **管理员校验** | 非管理员 | 返回错误 | 5104 |
-| **查询岗位** | 不存在 | 返回错误 | 5101 |
-| **审核状态检查** | auditStatus != PENDING | 返回错误 | 5103 |
-
----
-
-### 5.4 确认岗位解析结果流程
-
-```mermaid
-flowchart TD
-    Start([开始确认])
-    FindPosition{查询岗位}
-    CheckOwner{用户归属校验}
-    CheckStatus{parseStatus 检查}
-    ValidateProfile{验证画像数据}
-    SaveConfirmed[保存确认数据到 profileData]
-    UpdateConfirmed[更新 parseStatus 为 CONFIRMED]
-    ReturnSuccess[返回成功]
-    ReturnError[返回错误]
-
-    Start --> FindPosition
-
-    FindPosition -->|存在| CheckOwner
-    FindPosition -->|不存在<br/>5101 岗位不存在| ReturnError
-
-    CheckOwner -->|本人/公共岗位| CheckStatus
-    CheckOwner -->|无权操作<br/>5102 无权访问| ReturnError
-
-    CheckStatus -->|PENDING_CONFIRM| ValidateProfile
-    CheckStatus -->|其他状态<br/>5103 状态错误| ReturnError
-
-    ValidateProfile -->|有效| SaveConfirmed
-    ValidateProfile -->|无效<br/>5105 数据无效| ReturnError
-
-    SaveConfirmed --> UpdateConfirmed
-    UpdateConfirmed --> ReturnSuccess
-```
-
-**分支条件详情**：
-
-| 步骤 | 条件 | 结果 | 错误码 |
-|------|------|------|--------|
-| **查询岗位** | 不存在 | 返回错误 | 5101 |
-| **用户归属校验** | 非本人/非公共岗位 | 返回错误 | 5102 |
-| **状态检查** | parseStatus != PENDING_CONFIRM | 返回错误 | 5103 |
-| **数据验证** | JSON格式错误或必填字段缺失 | 返回错误 | 5105 |
-
----
-
-### 5.5 删除岗位流程
-
-```mermaid
-flowchart TD
-    Start([开始删除])
-    FindPosition{查询岗位}
-    CheckOwner{用户归属校验}
-    CheckParsing{parseStatus 检查}
-    DeleteRecord[删除岗位记录]
-    ReturnSuccess[返回成功]
-    ReturnError[返回错误]
-
-    Start --> FindPosition
-
-    FindPosition -->|存在| CheckOwner
-    FindPosition -->|不存在<br/>5101 岗位不存在| ReturnError
-
-    CheckOwner -->|本人/管理员| CheckParsing
-    CheckOwner -->|无权<br/>5102 无权访问| ReturnError
-
-    CheckParsing -->|非 PARSING| DeleteRecord
-    CheckParsing -->|PARSING<br/>5106 解析中不可删除| ReturnError
-
-    DeleteRecord --> ReturnSuccess
-```
-
-**分支条件详情**：
-
-| 步骤 | 条件 | 结果 | 错误码 |
-|------|------|------|--------|
-| **查询岗位** | 不存在 | 返回错误 | 5101 |
-| **用户归属校验** | 非本人/非管理员 | 返回错误 | 5102 |
-| **解析状态检查** | parseStatus = PARSING | 返回错误 | 5106 |
-
----
-
-### 5.6 重新解析 JD 流程
-
-```mermaid
-flowchart TD
-    Start([开始重新解析])
-    FindPosition{查询岗位}
-    CheckOwner{用户归属校验}
-    CheckStatus{parseStatus 检查}
-    UpdatePending[更新 parseStatus 为 PENDING]
-    AsyncTrigger[异步触发解析]
-    ReturnSuccess[返回成功]
-    ReturnError[返回错误]
-
-    Start --> FindPosition
-
-    FindPosition -->|存在| CheckOwner
-    FindPosition -->|不存在<br/>5101 岗位不存在| ReturnError
-
-    CheckOwner -->|本人| CheckStatus
-    CheckOwner -->|无权<br/>5102 无权访问| ReturnError
-
-    CheckStatus -->|PARSE_FAILED| UpdatePending
-    CheckStatus -->|PENDING_CONFIRM| UpdatePending
-    CheckStatus -->|CONFIRMED| UpdatePending
-    CheckStatus -->|其他状态<br/>5103 状态错误| ReturnError
-
-    UpdatePending --> AsyncTrigger
-    AsyncTrigger --> ReturnSuccess
-```
-
-**分支条件详情**：
-
-| 步骤 | 条件 | 结果 | 错误码 |
-|------|------|------|--------|
-| **查询岗位** | 不存在 | 返回错误 | 5101 |
-| **用户归属校验** | 非本人 | 返回错误 | 5102 |
-| **解析状态检查** | parseStatus 不在 [PARSE_FAILED, PENDING_CONFIRM, CONFIRMED] | 返回错误 | 5103 |
-
----
-
-## 6. 安全设计
-
-### 6.1 数据隔离
-
-| 设计 | 说明 |
-|------|------|
-| **用户岗位隔离** | 用户只能操作自己的岗位 |
-| **公共岗位** | isPublic=true 的岗位所有用户可查看 |
-| **管理员权限** | 审核、管理公共岗位需要管理员权限 |
-
-### 6.2 脱敏处理
-
-| 设计 | 说明 |
-|------|------|
-| **公司名脱敏** | 公司名 → "某互联网公司" / "某创业公司" |
-| **保留分析价值** | 脱敏后保留公司规模、行业等标签 |
-
-### 6.3 审核安全
-
-| 设计 | 说明 |
-|------|------|
-| **权限校验** | 只有 ADMIN 角色可审核 |
-| **审核日志** | 记录审核人、审核时间、审核结果 |
-| **审核备注** | 拒绝时必须填写原因 |
-
----
-
-## 7. 错误码设计
-
-### 7.1 岗位模块错误码（5xxx）
-
-| 错误码 | 消息 | 说明 |
-|--------|------|------|
-| 5001 | 岗位名称不能为空 | 校验失败 |
-| 5002 | JD描述不能为空 | 校验失败 |
-| 5003 | JD解析失败 | 解析过程出错 |
-| 5004 | 岗位解析中 | 岗位正在解析，无法操作 |
-
-### 7.2 业务错误码（51xx）
-
-| 错误码 | 消息 | 说明 |
-|--------|------|------|
-| 5101 | 岗位不存在 | 岗位ID不存在 |
-| 5102 | 无权访问 | 该岗位不属于当前用户 |
-| 5103 | 岗位状态错误 | 当前状态不支持该操作 |
-| 5104 | 无权操作 | 非管理员无权执行此操作 |
-| 5105 | 画像数据无效 | JSON格式错误或必填字段缺失 |
-| 5106 | 解析中不可删除 | 解析中的岗位不可删除 |
-
----
-
-## 8. 配置设计
-
-### 8.1 配置文件
+## 11. 配置
 
 ```yaml
 position:
-  # JD解析配置（实际模型由用户配置，默认使用 L2 标准模型）
-  parsing:
-    timeout-seconds: 60
-    retry-times: 3
-    tier: l2
-
-  # 缓存配置
-  cache:
-    enabled: true
-    ttl-days: 7
-    key-prefix: "position:parse"
-
-  # 脱敏配置
-  desensitization:
-    enabled: true
-    company-labels:
-      - "知名互联网公司"
-      - "中型企业"
-      - "创业公司"
-      - "某公司"
-
-  # 审核配置
-  audit:
-    require-remark-on-reject: true  # 拒绝时必须填写备注
+  analysis:
+    personal-active-limit: 5
+    personal-waiting-limit: 5
+    public-waiting-limit: 20
+    max-concurrency: 2
+    submission-interval: 5m
+    dispatch-retry-delay: 1s
+    enqueue-threads: 1
+    enqueue-queue-capacity: 100
+    enqueue-max-attempts: 3
+    enqueue-retry-delay: 200ms
+  upload:
+    max-size: 10485760
+    max-code-points: 2000
+    max-pdf-pages: 20
+    extraction-timeout: 15s
+    extraction-threads: 2
+    extraction-queue-capacity: 8
+    temp-directory: ${POSITION_UPLOAD_TEMP_DIR:${java.io.tmpdir}/interview-coach/position-jd}
+    orphan-max-age: 24h
 ```
+
+岗位模块没有单独的 LLM 总 deadline 配置。CPA/LLM 的最终调用上限由共享模型层负责；岗位 Worker 不在远程调用真实结束前释放容量。
+
+## 12. 前端状态与轮询
+
+- 用户岗位页提供个人、公共和归档视图；个人/管理员按能力字段显示确认、重试、归档和永久删除按钮。
+- 管理端是独立“公共岗位管理”，确认正式画像后立即公开，不再展示个人岗位审核流程。
+- `WAITING/RUNNING` 每 2 秒轮询；无固定总时长上限。
+- 页面隐藏时清理定时器并中止请求；恢复可见时立即继续；组件卸载时清理全部轮询。
+- `SUCCEEDED/FAILED` 停止后台轮询；`SUCCEEDED` 提示确认，`FAILED` 提示重试。
+- 前端 PDF 使用 `pdfjs-dist` 按需加载并检查签名、加密、页数和提取文本；后端仍重新执行权威校验。
+
+## 13. V4 手工执行说明
+
+V4 是真实或持久开发数据库变更，必须由用户执行，AI 不代执行。
+
+1. 确认目标为可丢弃或已备份的开发 MySQL，停止依赖该库的应用写入。
+2. 当前方案不回填旧 `interview`；若已有旧面试数据，先导出备份后清空相关开发数据，或直接重建开发库。
+3. 新库按 V1、V2、V3、V4 顺序执行；已有 V1～V3 的开发库只追加执行 `V4__position_analysis_lifecycle.sql`，不得修改已执行迁移。
+4. 执行后核对 `position.archived_at`、`sys_user.last_position_analysis_submitted_at`、三个 `interview.*_snapshot` 字段、`position_analysis_task` 四状态约束及唯一/查询索引。
+5. 再启动应用，让 `spring.jpa.hibernate.ddl-auto=validate` 校验映射；启动和真实联调需另行确认。
+
+建议核对 SQL：
+
+```sql
+SHOW COLUMNS FROM `position` LIKE 'archived_at';
+SHOW COLUMNS FROM sys_user LIKE 'last_position_analysis_submitted_at';
+SHOW COLUMNS FROM interview LIKE '%_snapshot';
+SHOW CREATE TABLE position_analysis_task;
+```
+
+V4 没有自动 down migration。失败时停止继续写入，保留错误和备份；回退使用执行前备份恢复，或重建可丢弃开发库，不通过修改 V1～V3 或伪造默认快照值回退。
 
 ---
 
-## 9. LLM Prompt 设计
-
-### 9.1 JD 解析 Prompt
-
-#### System Prompt（系统角色）
-
-```
-你是一个专业的JD解析助手，负责从岗位描述中提取关键信息并生成结构化的JSON数据。
-```
-
-#### User Prompt（用户输入内容）
-
-```
-请从以下JD文本中提取关键信息，生成结构化的JSON数据。
-
-**提取要求：**
-1. 只提取JD中明确提到的信息，不要推测
-2. 对不确定的信息，标注 confidence: low
-3. 技能重要性分为：必须、加分
-4. 根据岗位描述判断岗位等级：初级/中级/高级/专家
-5. 公司名称已脱敏为"某互联网公司/某创业公司"等
-
-**输出格式：**
-{
-  "basicInfo": {
-    "title": "岗位名称",
-    "level": "初级/中级/高级/专家",
-    "salaryRange": "薪资范围（如有）",
-    "location": "工作地点（如有）"
-  },
-  "requiredSkills": [
-    { "skill": "技能名称", "importance": "必须", "depth": "L1-L5" }
-  ],
-  "preferredSkills": [
-    { "skill": "技能名称", "importance": "加分", "depth": "L1-L5" }
-  ],
-  "probingDirections": [
-    {
-      "direction": "考察方向名称",
-      "priority": 1,
-      "depthRange": "L1-L5",
-      "sampleQuestions": ["样例问题1", "样例问题2"]
-    }
-  ],
-  "interviewFocus": ["面试重点1", "面试重点2"],
-  "confidenceLevel": 0.0-1.0
-}
-
-**JD文本：**
-{jd_text}
-```
-
----
-
-### 9.2 岗位画像生成 Prompt
-
-#### System Prompt（系统角色）
-
-```
-你是一个专业的面试官，根据岗位要求生成面试考察重点和策略。
-```
-
-#### User Prompt（用户输入内容）
-
-```
-根据以下岗位要求，生成详细的面试考察重点。
-
-**输入岗位信息：**
-{position_profile_data}
-
-**生成要求：**
-1. 确定每个考察方向的优先级
-2. 为每个方向指定考察深度范围（L1-L5）
-3. 生成针对该岗位的样例问题
-4. 确定面试时间分配建议
-
-**输出格式：**
-{
-  "interviewStrategy": {
-    "totalDuration": "面试总时长",
-    "topicOrder": ["主题1", "主题2", "主题3"],
-    "timeAllocation": {
-      "主题1": "建议时长",
-      "主题2": "建议时长"
-    }
-  },
-  "keyTopics": [
-    {
-      "topic": "并发编程",
-      "priority": 1,
-      "depthTarget": "L3",
-      "mustExplore": ["必须深入的问题1"],
-      "optionalExplore": ["可选深入的问题1"]
-    }
-  ]
-}
-```
-
----
-
-## 10. 岗位状态流转
-
-### 10.1 解析状态流转
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: 创建岗位
-    PENDING --> PARSING: 触发解析
-    PARSING --> PENDING_CONFIRM: 解析完成
-    PARSING --> PARSE_FAILED: 文本提取失败
-    PARSE_FAILED --> PENDING: 重新解析
-    PENDING_CONFIRM --> CONFIRMED: 用户确认
-    PENDING_CONFIRM --> PENDING: 重新解析
-    CONFIRMED --> [*]: 进入面试
-```
-
-### 10.2 审核状态流转
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: 创建岗位
-    PENDING --> APPROVED: 管理员审核通过
-    PENDING --> REJECTED: 管理员审核拒绝
-    REJECTED --> PENDING: 用户重新提交
-    APPROVED --> [*]: 可被选用
-```
-
----
-
-*文档版本：v0.1*
-*创建时间：2026-07-20*
+*文档版本：v1.0*
+*更新时间：2026-08-03*

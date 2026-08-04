@@ -22,9 +22,8 @@ spring:
 
   jpa:
     hibernate:
-      # 数据保留策略：未修改实体/表结构时，update 不会删除已有数据。
-      # 生产环境如需精确控制 schema 变更，建议后续引入 Flyway/Liquibase。
-      ddl-auto: update
+      # 表结构由人工执行版本化 SQL 管理，Hibernate 只校验实体映射，不在启动时自动改表。
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
@@ -43,6 +42,11 @@ spring:
           max-active: 8
           max-idle: 8
           min-idle: 0
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
 
   jackson:
     default-property-inclusion: non_null
@@ -74,8 +78,8 @@ resume:
     storage-path: D:/trae_app_data/interview-coach/uploads/resumes
   llm:
     # 简历分析智能体 LLM 配置
-    # 默认关闭真实 LLM，使用 Mock 返回空画像；启用真实 LLM 时设置 enabled=true 并配置 vendors
-    enabled: false
+    # 开发测试使用 CPA 提供的 OpenAI 兼容接口；启动前需填写 openai.api-key。
+    enabled: ${RESUME_LLM_ENABLED:false}
     # LLM 调用超时时间（秒）
     timeout-seconds: 60
     # 失败重试次数
@@ -95,10 +99,10 @@ resume:
         model: qwen-plus
       openai:
         type: OPENAI_COMPATIBLE
-        enabled: false
+        enabled: ${OPENAI_ENABLED:false}
         api-key: ${OPENAI_API_KEY:}
-        base-url: https://api.openai.com
-        model: gpt-3.5-turbo
+        base-url: ${OPENAI_BASE_URL:http://localhost:18717}
+        model: ${OPENAI_MODEL:gpt-5.6-sol}
       zhipu:
         type: OPENAI_COMPATIBLE
         enabled: false
@@ -109,21 +113,38 @@ resume:
     tiers:
       l1:
         # 轻量任务：格式化、简单分类
-        primary: dashscope
-        fallback: dashscope
+        primary: openai
+        fallback: openai
       l2:
         # 标准任务：简历/JD 解析、画像生成
-        primary: dashscope
+        primary: openai
         fallback: openai
       l3:
         # 高性能任务：深度推理、复杂评估
-        primary: dashscope
+        primary: openai
         fallback: openai
 
 position:
+  analysis:
+    personal-active-limit: 5
+    personal-waiting-limit: 5
+    public-waiting-limit: 20
+    max-concurrency: 2
+    submission-interval: 5m
+    dispatch-retry-delay: 1s
+    enqueue-threads: 1
+    enqueue-queue-capacity: 100
+    enqueue-max-attempts: 3
+    enqueue-retry-delay: 200ms
   upload:
     max-size: 10485760
-    storage-path: D:/trae_app_data/interview-coach/uploads/positions
+    max-code-points: 2000
+    max-pdf-pages: 20
+    extraction-timeout: 15s
+    extraction-threads: 2
+    extraction-queue-capacity: 8
+    temp-directory: ${POSITION_UPLOAD_TEMP_DIR:${java.io.tmpdir}/interview-coach/position-jd}
+    orphan-max-age: 24h
 
 # Agent 权限边界配置（P2）：支持通过 YAML 覆盖各 Tool 的允许调用 Agent。
 # 方法 key 规则为：声明类简单名.方法名，例如 LlmInterviewService.chat。

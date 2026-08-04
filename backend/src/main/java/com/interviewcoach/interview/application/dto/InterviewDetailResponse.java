@@ -26,6 +26,7 @@ public class InterviewDetailResponse {
     private String pendingQuestion;
     private String positionTitle;
     private String companyName;
+    private String jobCategory;
     private Integer overallScore;
     private String grade;
     private LocalDateTime startedAt;

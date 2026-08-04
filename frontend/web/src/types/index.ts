@@ -106,14 +106,67 @@ export interface Position {
   location?: string
   salaryRange?: string
   jdContent?: string
-  parseStatus: string
-  parseStatusLabel?: string
-  auditStatus: string
-  auditStatusLabel?: string
   isPublic?: boolean
+  userId?: number
+  archived: boolean
+  archivedAt?: string
+  latestTaskId?: number
+  latestTaskStatus?: PositionAnalysisTaskStatus
+  latestTaskStatusLabel?: string
+  queueAhead?: number
+  profileUsable: boolean
+  canConfirm: boolean
+  canRetry: boolean
+  analysisErrorCode?: string
+  analysisErrorMessage?: string
   createdAt?: string
   updatedAt?: string
+}
+
+export type PositionAnalysisTaskStatus = 'WAITING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+
+export interface PositionCreateResult {
+  positionId: number
+  positionName: string
+  taskId: number
+  latestTaskStatus: PositionAnalysisTaskStatus
+}
+
+export interface PositionAnalysisStatus {
+  positionId: number
+  taskId?: number
+  latestTaskStatus?: PositionAnalysisTaskStatus
+  latestTaskStatusLabel?: string
+  queueAhead?: number
+  analysisErrorCode?: string
+  analysisErrorMessage?: string
+  profileUsable: boolean
+  canConfirm: boolean
+  canRetry: boolean
+  archived: boolean
+}
+
+export interface PositionProfileResponse {
+  profileId?: number
+  positionId: number
   profile?: PositionProfileData
+  taskId?: number
+  latestTaskStatus?: PositionAnalysisTaskStatus
+  latestTaskStatusLabel?: string
+  candidateProfile?: PositionProfileData
+  analysisErrorCode?: string
+  analysisErrorMessage?: string
+  profileUsable: boolean
+  canConfirm: boolean
+  canRetry: boolean
+  archived: boolean
+}
+
+export interface PositionListResponse {
+  content: Position[]
+  totalElements: number
+  totalPages: number
+  currentPage: number
 }
 
 export interface PositionProfileData {
@@ -150,6 +203,7 @@ export interface InterviewSession {
   id: number
   positionTitle: string
   company: string
+  jobCategory?: string
   status: 'ongoing' | 'completed' | 'interrupted'
   score?: number
   level?: string
@@ -207,6 +261,7 @@ export interface InterviewDetail {
   pendingQuestion?: string
   positionTitle: string
   companyName: string
+  jobCategory: string
   overallScore?: number
   grade?: string
   startedAt?: string

@@ -2,24 +2,9 @@
  * 后台管理模块类型定义。
  */
 
-export interface PositionListItem {
-  positionId: number
-  positionName: string
-  companyName?: string
-  jobCategory: string
-  jobCategoryLabel?: string
-  level?: string
-  levelLabel?: string
-  location?: string
-  parseStatus: string
-  parseStatusLabel?: string
-  auditStatus: string
-  auditStatusLabel?: string
-  isPublic?: boolean
-  userId?: number
-  createdAt?: string
-  updatedAt?: string
-}
+import type { Position } from '@/types'
+
+export type PositionListItem = Position
 
 export interface PositionListResponse {
   content: PositionListItem[]
@@ -29,7 +14,7 @@ export interface PositionListResponse {
 }
 
 export interface AdminDashboardStats {
-  pendingPositions: number
+  pendingPublicPositions: number
   pendingQuestions: number
   totalUsers: number
   todayAudits: number

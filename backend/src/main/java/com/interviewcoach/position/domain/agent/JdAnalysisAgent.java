@@ -4,17 +4,16 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.interviewcoach.common.security.agent.AgentContext;
 import com.interviewcoach.common.security.agent.AgentType;
+import com.interviewcoach.position.domain.exception.PositionAnalysisException;
+import com.interviewcoach.position.domain.exception.PositionAnalysisFailureCode;
 import com.interviewcoach.position.domain.model.PositionProfileData;
 import com.interviewcoach.resume.infrastructure.ai.LlmService;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
  * JD 分析智能体，负责调用 LLM 解析岗位描述并生成岗位画像。
  */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JdAnalysisAgent {
@@ -107,69 +106,120 @@ public class JdAnalysisAgent {
      * @return 岗位画像数据
      */
     public PositionProfileData analyze(String jdText) {
-        return AgentContext.runAs(AgentType.JD_ANALYSIS, () -> analyze(jdText, null));
+        return analyze(jdText, null);
     }
 
     /**
-     * 分析 JD 文本并生成岗位画像，支持按岗位大类兜底。
+     * 分析 JD 文本并生成必须通过结构校验的岗位画像；岗位大类保留为调用契约上下文。
      *
      * @param jdText      JD 文本
-     * @param jobCategory 岗位大类（如 TECH、PRODUCT），可为空
-     * @return 岗位画像数据
+     * @param jobCategory 岗位大类（当前 prompt 已包含 JD，本阶段不用于失败兜底）
+     * @return 通过校验的岗位画像数据
      */
     public PositionProfileData analyze(String jdText, String jobCategory) {
-        return AgentContext.runAs(AgentType.JD_ANALYSIS, () -> {
-            if (jdText == null || jdText.isBlank()) {
-                log.warn("[JdAnalysisAgent] JD 文本为空，返回兜底画像");
-                return fallbackProfile(jobCategory);
-            }
-
-            String userPrompt = String.format(USER_PROMPT_TEMPLATE, POSITION_KNOWLEDGE_BASE, jdText);
-
-            try {
-                String response = llmService.chat(SYSTEM_PROMPT, userPrompt);
-                PositionProfileData data = parseProfile(response);
-                if (isEmptyProfile(data)) {
-                    log.warn("[JdAnalysisAgent] LLM 返回空画像，使用兜底画像");
-                    return fallbackProfile(jobCategory);
-                }
-                return data;
-            } catch (Exception e) {
-                log.error("[JdAnalysisAgent] LLM 解析失败，返回兜底画像", e);
-                return fallbackProfile(jobCategory);
-            }
-        });
+        return AgentContext.runAs(AgentType.JD_ANALYSIS, () -> analyzeRequired(jdText));
     }
 
-    private boolean isEmptyProfile(PositionProfileData data) {
-        if (data == null) {
-            return true;
+    private PositionProfileData analyzeRequired(String jdText) {
+        if (jdText == null || jdText.isBlank()) {
+            throw new PositionAnalysisException(
+                    PositionAnalysisFailureCode.INPUT_INVALID,
+                    "岗位 JD 为空，请重新提交");
         }
-        boolean noSkills = (data.getRequiredSkills() == null || data.getRequiredSkills().isEmpty())
-                && (data.getPreferredSkills() == null || data.getPreferredSkills().isEmpty());
-        boolean noDirections = data.getProbingDirections() == null || data.getProbingDirections().isEmpty();
-        return noSkills && noDirections;
+        String userPrompt = String.format(USER_PROMPT_TEMPLATE, POSITION_KNOWLEDGE_BASE, jdText);
+        String response;
+        try {
+            response = llmService.chat(SYSTEM_PROMPT, userPrompt);
+        } catch (RuntimeException e) {
+            throw new PositionAnalysisException(
+                    PositionAnalysisFailureCode.LLM_REQUEST_FAILED,
+                    "岗位解析模型调用失败，请重新解析",
+                    e);
+        }
+        if (response == null || response.isBlank()) {
+            throw new PositionAnalysisException(
+                    PositionAnalysisFailureCode.LLM_EMPTY_RESPONSE,
+                    "岗位解析模型返回空结果，请重新解析");
+        }
+        PositionProfileData profile = parseProfile(response);
+        validateProfile(profile);
+        return profile;
     }
 
     private PositionProfileData parseProfile(String rawResponse) {
         String json = extractJson(rawResponse);
         try {
-            PositionProfileData data = objectMapper.readValue(json, PositionProfileData.class);
-            if (data == null) {
-                return PositionProfileData.empty();
-            }
-            // 兜底空字段
-            if (data.getBasicInfo() == null) data.setBasicInfo(new PositionProfileData.BasicInfo());
-            if (data.getRequiredSkills() == null) data.setRequiredSkills(List.of());
-            if (data.getPreferredSkills() == null) data.setPreferredSkills(List.of());
-            if (data.getProbingDirections() == null) data.setProbingDirections(List.of());
-            if (data.getInterviewFocus() == null) data.setInterviewFocus(List.of());
-            if (data.getConfidenceLevel() == null) data.setConfidenceLevel(0.0);
-            return data;
+            return objectMapper.readValue(json, PositionProfileData.class);
         } catch (JsonProcessingException e) {
-            log.error("[JdAnalysisAgent] LLM 返回 JSON 解析失败: {}", json, e);
-            return PositionProfileData.empty();
+            throw new PositionAnalysisException(
+                    PositionAnalysisFailureCode.LLM_INVALID_JSON,
+                    "岗位解析结果不是有效 JSON，请重新解析",
+                    e);
         }
+    }
+
+    /**
+     * 模型输出必须满足当前岗位画像契约；缺字段或空对象不能静默转成成功候选。
+     */
+    private void validateProfile(PositionProfileData profile) {
+        if (profile == null
+                || profile.getBasicInfo() == null
+                || profile.getRequiredSkills() == null
+                || profile.getPreferredSkills() == null
+                || profile.getProbingDirections() == null
+                || profile.getInterviewFocus() == null
+                || profile.getConfidenceLevel() == null) {
+            invalidProfile();
+        }
+        if (profile.getRequiredSkills().isEmpty()
+                && profile.getPreferredSkills().isEmpty()
+                && profile.getProbingDirections().isEmpty()) {
+            invalidProfile();
+        }
+        profile.getRequiredSkills().forEach(this::validateSkill);
+        profile.getPreferredSkills().forEach(this::validateSkill);
+        profile.getProbingDirections().forEach(this::validateDirection);
+        if (profile.getInterviewFocus().isEmpty()
+                || profile.getInterviewFocus().stream().anyMatch(this::isBlank)) {
+            invalidProfile();
+        }
+        double confidence = profile.getConfidenceLevel();
+        if (!Double.isFinite(confidence) || confidence < 0.0 || confidence > 1.0) {
+            invalidProfile();
+        }
+    }
+
+    private void validateSkill(PositionProfileData.SkillItem skill) {
+        if (skill == null
+                || isBlank(skill.getSkill())
+                || isBlank(skill.getImportance())
+                || isBlank(skill.getDepth())) {
+            invalidProfile();
+        }
+    }
+
+    private void validateDirection(PositionProfileData.ProbingDirection direction) {
+        if (direction == null
+                || isBlank(direction.getDirection())
+                || direction.getPriority() == null
+                || direction.getPriority() < 1
+                || direction.getPriority() > 5
+                || isBlank(direction.getDepthRange())
+                || direction.getSampleQuestions() == null
+                || direction.getSampleQuestions().isEmpty()
+                || direction.getSampleQuestions().stream().anyMatch(this::isBlank)) {
+            invalidProfile();
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private void invalidProfile() {
+        throw new PositionAnalysisException(
+                PositionAnalysisFailureCode.LLM_INVALID_PROFILE,
+                "岗位解析结果结构不完整，请重新解析");
     }
 
     /**
@@ -202,69 +252,5 @@ public class JdAnalysisAgent {
         }
 
         return trimmed;
-    }
-
-    /**
-     * 按岗位大类生成兜底画像，LLM 失败时仍能给用户一个可编辑的基础画像。
-     */
-    private PositionProfileData fallbackProfile(String jobCategory) {
-        PositionProfileData data = PositionProfileData.empty();
-        String category = jobCategory == null ? "" : jobCategory.toUpperCase();
-        switch (category) {
-            case "TECH", "JAVA", "FRONTEND" -> {
-                data.setInterviewFocus(List.of("技术深度", "源码理解", "项目经验", "系统设计", "问题解决能力"));
-                data.setProbingDirections(List.of(
-                        direction("核心语言与基础", 1, "L3-L5", List.of("语言新特性与底层原理", "集合/并发基础")),
-                        direction("框架与中间件", 2, "L3-L5", List.of("Spring/框架源码", "缓存/消息队列/数据库原理")),
-                        direction("系统设计与高并发", 3, "L3-L5", List.of("高并发场景设计", "微服务治理与分布式事务")),
-                        direction("线上问题排查", 4, "L3-L5", List.of("JVM/性能调优", "线上故障定位方法论"))
-                ));
-            }
-            case "PRODUCT" -> {
-                data.setInterviewFocus(List.of("产品思维", "数据分析", "沟通协作", "商业敏感度", "项目落地能力"));
-                data.setProbingDirections(List.of(
-                        direction("产品设计与需求分析", 1, "L3-L5", List.of("需求优先级排序", "产品方案设计")),
-                        direction("数据驱动决策", 2, "L3-L5", List.of("指标体系搭建", "A/B 测试与实验分析")),
-                        direction("用户增长与商业化", 3, "L3-L5", List.of("增长策略", "商业模式与变现路径")),
-                        direction("跨团队推进", 4, "L3-L5", List.of("项目风险管理", "冲突协调与向上管理"))
-                ));
-            }
-            case "OPERATION" -> {
-                data.setInterviewFocus(List.of("数据敏感度", "增长思维", "执行力", "创意策划", "用户洞察"));
-                data.setProbingDirections(List.of(
-                        direction("用户增长", 1, "L3-L5", List.of("AARRR 模型应用", "渠道投放与裂变")),
-                        direction("内容与活动运营", 2, "L3-L5", List.of("活动策划与复盘", "内容生态建设")),
-                        direction("数据与指标", 3, "L3-L5", List.of("核心指标拆解", "ROI 分析")),
-                        direction("用户生命周期", 4, "L3-L5", List.of("分层运营", "流失预警与召回"))
-                ));
-            }
-            case "DESIGN" -> {
-                data.setInterviewFocus(List.of("设计思维", "用户体验", "视觉表现", "沟通协作", "产品理解"));
-                data.setProbingDirections(List.of(
-                        direction("交互与用户体验", 1, "L3-L5", List.of("信息架构与流程设计", "可用性测试")),
-                        direction("视觉与品牌", 2, "L3-L5", List.of("设计系统搭建", "视觉风格把控")),
-                        direction("工具与落地", 3, "L3-L5", List.of("Figma/Sketch 高级技巧", "设计交付与走查")),
-                        direction("跨团队协作", 4, "L3-L5", List.of("与产品/研发协作", "设计评审与说服"))
-                ));
-            }
-            default -> {
-                data.setInterviewFocus(List.of("专业能力", "项目经验", "沟通表达", "问题解决能力"));
-                data.setProbingDirections(List.of(
-                        direction("岗位核心技能", 1, "L3-L5", List.of("专业基础知识", "核心工具使用")),
-                        direction("项目与实践", 2, "L3-L5", List.of("项目难点与解决方案", "量化成果")),
-                        direction("综合素质", 3, "L3-L5", List.of("沟通协作", "学习迭代能力"))
-                ));
-            }
-        }
-        return data;
-    }
-
-    private PositionProfileData.ProbingDirection direction(String name, int priority, String depthRange, List<String> questions) {
-        PositionProfileData.ProbingDirection d = new PositionProfileData.ProbingDirection();
-        d.setDirection(name);
-        d.setPriority(priority);
-        d.setDepthRange(depthRange);
-        d.setSampleQuestions(questions);
-        return d;
     }
 }

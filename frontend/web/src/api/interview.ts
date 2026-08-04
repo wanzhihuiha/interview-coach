@@ -70,6 +70,7 @@ function mapDetailToSession(detail: InterviewDetail): InterviewSession {
     id: detail.interviewId,
     positionTitle: detail.positionTitle,
     company: detail.companyName || '',
+    jobCategory: detail.jobCategory,
     status: mapStatus(detail.status),
     statusLabel: detail.statusLabel,
     score: detail.overallScore,
@@ -110,6 +111,7 @@ const mockDetail: InterviewDetail = {
   },
   positionTitle: 'Java开发',
   companyName: '字节跳动',
+  jobCategory: 'TECH',
   startedAt: '2024-01-20T10:00:00'
 }
 

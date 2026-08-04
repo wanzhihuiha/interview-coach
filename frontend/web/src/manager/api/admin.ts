@@ -1,5 +1,13 @@
 import request from '@/api/request'
-import type { ApiResponse } from '@/types'
+import type { PositionCreatePayload } from '@/api/position'
+import type {
+  ApiResponse,
+  Position,
+  PositionAnalysisStatus,
+  PositionCreateResult,
+  PositionProfileData,
+  PositionProfileResponse
+} from '@/types'
 import type {
   AdminDashboardStats,
   AuditLogListResponse,
@@ -19,19 +27,65 @@ export function getAdminDashboardStats(): Promise<ApiResponse<AdminDashboardStat
 export function getAdminPositions(
   page = 0,
   size = 10,
-  auditStatus?: string
+  archived = false
 ): Promise<ApiResponse<PositionListResponse>> {
   return request.get('/admin/positions', {
-    params: { page, size, auditStatus }
+    params: { page, size, archived }
   })
 }
 
-export function getAdminPositionDetail(id: number): Promise<ApiResponse<unknown>> {
+export function createAdminPosition(
+  data: PositionCreatePayload
+): Promise<ApiResponse<PositionCreateResult>> {
+  return request.post('/admin/positions', data)
+}
+
+export function uploadAdminPosition(
+  file: File,
+  positionName: string
+): Promise<ApiResponse<PositionCreateResult>> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('fileType', file.name.split('.').pop()?.toUpperCase() || '')
+  formData.append('positionName', positionName)
+  return request.post('/admin/positions/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function getAdminPositionDetail(id: number): Promise<ApiResponse<Position>> {
   return request.get(`/admin/positions/${id}`)
 }
 
-export function auditPosition(id: number, status: string, remark?: string): Promise<ApiResponse<void>> {
-  return request.put(`/positions/${id}/audit`, { status, remark })
+export function getAdminPositionProfile(id: number): Promise<ApiResponse<PositionProfileResponse>> {
+  return request.get(`/admin/positions/${id}/profile`)
+}
+
+export function getAdminPositionAnalysisStatus(
+  id: number,
+  signal?: AbortSignal
+): Promise<ApiResponse<PositionAnalysisStatus>> {
+  return request.get(`/admin/positions/${id}/analysis-status`, { signal })
+}
+
+export function confirmAdminPosition(
+  id: number,
+  taskId: number,
+  profile: PositionProfileData
+): Promise<ApiResponse<void>> {
+  return request.put(`/admin/positions/${id}/confirm`, { taskId, profile })
+}
+
+export function reparseAdminPosition(id: number): Promise<ApiResponse<PositionCreateResult>> {
+  return request.put(`/admin/positions/${id}/reparse`)
+}
+
+export function archiveAdminPosition(id: number): Promise<ApiResponse<void>> {
+  return request.put(`/admin/positions/${id}/archive`)
+}
+
+export function deleteAdminPosition(id: number): Promise<ApiResponse<void>> {
+  return request.delete(`/admin/positions/${id}`)
 }
 
 export interface QuestionBankListResponse {

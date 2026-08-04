@@ -11,12 +11,10 @@ import com.interviewcoach.interview.domain.model.EvaluationResult;
 import com.interviewcoach.interview.domain.model.EvaluationSignal;
 import com.interviewcoach.interview.domain.model.InterviewContext;
 import com.interviewcoach.interview.domain.model.NextAction;
-import com.interviewcoach.interview.domain.repository.InterviewMessageRepository;
 import com.interviewcoach.common.security.agent.AgentContext;
 import com.interviewcoach.common.security.agent.AgentType;
 import com.interviewcoach.interview.infrastructure.tool.EvaluationFallbackTool;
 import com.interviewcoach.position.domain.model.PositionProfileData;
-import com.interviewcoach.position.domain.repository.PositionRepository;
 import com.interviewcoach.resume.domain.model.UserProfileData;
 import com.interviewcoach.resume.domain.model.ResumeProfileAnalysisData;
 import java.util.ArrayList;
@@ -25,7 +23,6 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 协调者 Agent：负责初始化上下文、识别当前环节意图、调度对应 Skill。
@@ -39,8 +36,6 @@ public class CoordinatorAgent {
     private final EvaluatorAgent evaluatorAgent;
     private final EvaluationFallbackTool fallbackTool;
     private final SkillRegistry skillRegistry;
-    private final InterviewMessageRepository messageRepository;
-    private final PositionRepository positionRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -56,7 +51,7 @@ public class CoordinatorAgent {
             context.setUserProfile(userProfile);
             context.setUserProfileAnalysis(userProfileAnalysis);
             context.setPositionProfile(positionProfile);
-            context.setJobCategory(resolveJobCategory(interview.getPositionId()));
+            context.setJobCategory(interview.getJobCategorySnapshot());
             context.setSelectedPhases(parsePhases(interview.getSelectedPhases()));
             context.setCurrentPhase(interview.getCurrentPhase());
             context.setCurrentTopicId(interview.getCurrentTopicId());
@@ -87,23 +82,24 @@ public class CoordinatorAgent {
     }
 
     /**
-     * 处理用户回答并生成下一题。
-     * 流程：保存回答 -> 当前 Skill 评估 -> Skill 决策 -> 生成下一题/切换环节/结束。
+     * 在事务外处理用户回答并生成下一题；消息和面试状态由应用层短事务统一写回。
      */
-    @Transactional
     public TurnResult coordinate(InterviewContext context, Interview interview,
                                  String questionText, String answerText) {
         return AgentContext.runAs(AgentType.COORDINATOR, () -> {
-            // 1. 保存回答
             int answerSeqNo = interview.getTotalQuestionCount() + 1;
-            InterviewMessage answer = saveMessage(interview, context.getCurrentPhase(),
-                    "candidate", answerText, context.getCurrentTopicId(),
-                    context.getCurrentTopicName(), context.getCurrentDepth(), answerSeqNo);
+            InterviewMessage answer = new InterviewMessage();
+            answer.setInterviewId(interview.getId());
+            answer.setPhase(context.getCurrentPhase().name());
+            answer.setRole("candidate");
+            answer.setContent(answerText);
+            answer.setTopicId(context.getCurrentTopicId());
+            answer.setTopicName(context.getCurrentTopicName());
+            answer.setDepth(context.getCurrentDepth());
+            answer.setSeqNo(answerSeqNo);
 
-            // 2. 加载当前 Skill
             InterviewSkill currentSkill = skillRegistry.resolve(context.getCurrentPhase());
 
-            // 3. 是否评估
             EvaluationSignal signal;
             if (currentSkill.needEvaluate(context, answer)) {
                 EvaluationResult evalResult = evaluatorAgent.evaluate(context, questionText, answerText);
@@ -119,7 +115,6 @@ public class CoordinatorAgent {
                 signal = neutralSignal(context);
             }
 
-            // 4. Skill 决策
             NextAction action = currentSkill.decideNextAction(context, signal);
             log.info("[CoordinatorAgent] interviewId={}, action={}, phase={}",
                     interview.getId(), action, context.getCurrentPhase());
@@ -154,12 +149,6 @@ public class CoordinatorAgent {
                 }
                 default -> throw new IllegalStateException("未知决策: " + action);
             }
-
-            // 5. 保存下一题
-            int nextQuestionSeqNo = answerSeqNo + 1;
-            saveMessage(interview, context.getCurrentPhase(), "interviewer",
-                    nextQuestion, context.getCurrentTopicId(), context.getCurrentTopicName(),
-                    context.getCurrentDepth(), nextQuestionSeqNo);
 
             TurnResult result = new TurnResult();
             result.setQuestion(nextQuestion);
@@ -198,31 +187,6 @@ public class CoordinatorAgent {
         signal.setSuggestedNextDepth(context.getCurrentDepth());
         signal.setContinueProbing(true);
         return signal;
-    }
-
-    private InterviewMessage saveMessage(Interview interview, InterviewPhase phase, String role,
-                                         String content, String topicId, String topicName, Integer depth,
-                                         int seqNo) {
-        InterviewMessage message = new InterviewMessage();
-        message.setInterviewId(interview.getId());
-        message.setPhase(phase.name());
-        message.setRole(role);
-        message.setContent(content);
-        message.setTopicId(topicId);
-        message.setTopicName(topicName);
-        message.setDepth(depth);
-        message.setSeqNo(seqNo);
-        messageRepository.save(message);
-        return message;
-    }
-
-    private String resolveJobCategory(Long positionId) {
-        if (positionId == null) {
-            return "GENERAL";
-        }
-        return positionRepository.findById(positionId)
-                .map(p -> p.getJobCategory() == null ? "GENERAL" : p.getJobCategory())
-                .orElse("GENERAL");
     }
 
     private List<InterviewPhase> parsePhases(String phasesJson) {
