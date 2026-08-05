@@ -146,10 +146,24 @@ position:
     temp-directory: ${POSITION_UPLOAD_TEMP_DIR:${java.io.tmpdir}/interview-coach/position-jd}
     orphan-max-age: 24h
 
+# 面试并发槽位与 LLM 限流配置
+interview:
+  slot:
+    # 同时在线面试人数上限，超过后新创建面试直接提示繁忙
+    max-concurrent: 20
+    # 槽位 Redis key 过期时间（分钟），兜底释放异常断开的面试
+    ttl-minutes: 10
+  llm-rate-limit:
+    # 是否启用 LLM 限流
+    enabled: true
+    # 每分钟最大 LLM 请求数
+    requests-per-minute: 60
+    # 每分钟最大 Token 数（估算值）
+    tokens-per-minute: 100000
+
 # Agent 权限边界配置（P2）：支持通过 YAML 覆盖各 Tool 的允许调用 Agent。
 # 方法 key 规则为：声明类简单名.方法名，例如 LlmInterviewService.chat。
 # 未配置的方法使用 @AgentPermission 注解默认值；动态评估器始终生效。
-interview:
   question:
     # 题目去重相似度阈值（0.0 - 1.0），达到该阈值视为重复题目
     duplicate-threshold: 0.85

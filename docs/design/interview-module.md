@@ -19,6 +19,8 @@
 | **流式输出** | SSE 流式推送问题给用户 |
 | **评估记录** | 评估者 Agent 实时评估回答 |
 | **深度控制** | 根据回答质量控制追问深度（专业面试阶段） |
+| **并发控制** | 限制同时在线面试数，超载直接拒绝 |
+| **LLM 限流** | 限制每分钟 LLM 请求数与 Token 数 |
 | **主题切换** | 根据评估结果决定切换主题（专业面试阶段） |
 | **报告生成** | 面试结束生成评估报告 |
 
@@ -51,6 +53,7 @@
 | 成长模块 | 触发成长方案生成 |
 | 基础设施模块 | 脱敏 Tool、审计 Tool、持久化 Tool |
 | AI 服务层 | LLM 调用（Spring AI Alibaba） |
+| Redis | 并发槽位、LLM 限流计数 |
 
 ---
 
@@ -343,6 +346,28 @@ public class InterviewBudget {
 | **技术实现** | SSE（Server-Sent Events） |
 | **推送内容** | 问题文本、思考状态、评估结果 |
 
+### 3.8 并发控制与 LLM 限流
+
+#### 3.8.1 面试并发槽位
+
+| 项目 | 说明 |
+|------|------|
+| **控制目标** | 限制同时在线的面试会话数量 |
+| **实现方式** | Redis 分布式计数信号量 |
+| **超限策略** | 不进入等待队列，直接返回错误码 `6111` |
+| **槽位释放** | 面试自然结束、主动结束、Redis TTL 兜底 |
+| **配置项** | `interview.slot.max-concurrent`、`interview.slot.ttl-minutes` |
+
+#### 3.8.2 LLM API 限流
+
+| 项目 | 说明 |
+|------|------|
+| **控制目标** | 保护 LLM provider 的 RPM/TPM 上限 |
+| **实现方式** | Redis 分布式令牌桶 |
+| **限流维度** | 每分钟请求数、每分钟 Token 数 |
+| **触发结果** | 返回错误码 `6112`，提示稍后重试 |
+| **配置项** | `interview.llm-rate-limit.enabled`、`requests-per-minute`、`tokens-per-minute` |
+
 ---
 
 ## 4. 接口设计
@@ -399,6 +424,7 @@ public class InterviewBudget {
 | 6002 | 岗位不存在或未审核 | 岗位状态不对 |
 | 6003 | 简历已锁定在其他面试 | 冲突检查 |
 | 6006 | 未选择任何环节 | selectedPhases 为空 |
+| 6111 | 当前面试者过多 | 并发槽位已满 |
 
 ---
 
@@ -423,6 +449,7 @@ data: {"type": "done"}
 ```
 data: {"type": "error", "code": "LLM_TIMEOUT", "message": "当前生成超时，已为你切换到备选题目", "fallback": true}
 data: {"type": "error", "code": "LLM_SERVICE_ERROR", "message": "面试官服务暂时不可用", "fallback": true}
+data: {"type": "error", "code": "6112", "message": "AI 服务繁忙，请稍后重试", "fallback": false}
 ```
 
 **错误码**：
@@ -432,6 +459,7 @@ data: {"type": "error", "code": "LLM_SERVICE_ERROR", "message": "面试官服务
 | 6102 | 面试已结束 | 状态已结束 |
 | 6103 | 面试已中断 | 用户主动中断 |
 | 6108 | LLM 调用失败 | 已降级为题库模式 |
+| 6112 | AI 服务繁忙 | LLM 限流触发 |
 
 ---
 
@@ -539,7 +567,9 @@ flowchart TD
 
     SortPhases --> BuildContext
     BuildContext --> GenerateFirstQuestion
-    GenerateFirstQuestion --> CreateInterview
+    GenerateFirstQuestion --> AcquireSlot{占用并发槽位?}
+    AcquireSlot -->|是| CreateInterview
+    AcquireSlot -->|否<br/>6111 当前面试者过多| ReturnError
     CreateInterview --> ReturnSuccess
 ```
 
@@ -1233,6 +1263,56 @@ public class EvaluationFallbackTool {
 - 是否包含预设关键词
 - 是否包含"不知道"/"不了解"等消极表达
 
+#### 6.4.3 InterviewSlotManager（并发槽位管理）
+
+```java
+/**
+ * 面试并发槽位管理器：限制同时在线的面试会话数量。
+ */
+@Component
+public class InterviewSlotManager {
+    /**
+     * 尝试占用一个面试槽位。
+     * @param interviewId 面试 ID
+     * @return true 占用成功，false 已达上限
+     */
+    public boolean acquireSlot(Long interviewId);
+
+    /**
+     * 释放面试槽位，幂等操作。
+     * @param interviewId 面试 ID
+     */
+    public void releaseSlot(Long interviewId);
+
+    /**
+     * 获取当前活跃面试数。
+     */
+    public long getActiveCount();
+}
+```
+
+#### 6.4.4 InterviewLlmRateLimiter（LLM 限流器）
+
+```java
+/**
+ * LLM API 限流器：基于 Redis 令牌桶限制每分钟请求数与 Token 数。
+ */
+@Component
+public class InterviewLlmRateLimiter {
+    /**
+     * 尝试获取 LLM 调用许可。
+     * @param estimatedTokens 预估本次调用消耗的 Token 数
+     * @return true 允许调用，false 触发限流
+     */
+    public boolean tryAcquire(int estimatedTokens);
+
+    /**
+     * 估算文本对应的 Token 数。
+     */
+    public int estimateTokens(String systemPrompt, String userPrompt);
+}
+```
+
 ---
 
 ## 7. 安全设计
@@ -1251,7 +1331,15 @@ public class EvaluationFallbackTool {
 | **回答内容限制** | 限制回答长度，防止恶意输入 |
 | **流式中断** | 支持客户端中断 SSE 连接 |
 
-### 7.3 审计日志
+### 7.3 资源保护
+
+| 设计 | 说明 |
+|------|------|
+| **并发槽位** | 通过 Redis 计数信号量限制同时在线面试数，超载直接拒绝 |
+| **LLM 限流** | 通过 Redis 令牌桶限制 LLM 调用速率，防止 provider 超限 |
+| **槽位兜底释放** | 槽位 Redis key 设置 TTL，异常断连时自动释放 |
+
+### 7.4 审计日志
 
 | 记录场景 | 记录内容 |
 |---------|---------|
@@ -1260,6 +1348,8 @@ public class EvaluationFallbackTool {
 | 回答提交 | interviewId, questionId, phase, answerLength, time |
 | 主题切换 | interviewId, fromTopic, toTopic, reason, time |
 | 面试结束 | interviewId, reason, duration, questionCount, completedPhases, time |
+| 槽位占用失败 | userId, maxConcurrent, activeCount, time |
+| LLM 限流触发 | interviewId, estimatedTokens, time |
 
 ---
 
@@ -1285,6 +1375,8 @@ public class EvaluationFallbackTool {
 | 6105 | 回答内容无效 | 回答为空或过长 |
 | 6107 | 环节不存在 | selectedPhases 包含无效值 |
 | 6108 | LLM 调用失败 | 已降级为题库模式 |
+| 6111 | 当前面试者过多 | 并发槽位已满 |
+| 6112 | AI 服务繁忙 | LLM 限流触发 |
 
 ---
 

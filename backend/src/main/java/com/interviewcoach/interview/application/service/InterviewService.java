@@ -25,6 +25,7 @@ import com.interviewcoach.interview.domain.repository.InterviewMessageRepository
 import com.interviewcoach.interview.domain.repository.InterviewReportRepository;
 import com.interviewcoach.interview.domain.repository.InterviewRepository;
 import com.interviewcoach.interview.infrastructure.desensitize.ReportDesensitizer;
+import com.interviewcoach.interview.infrastructure.redis.InterviewSlotManager;
 import com.interviewcoach.position.domain.entity.Position;
 import com.interviewcoach.position.domain.model.PositionProfileData;
 import com.interviewcoach.position.domain.repository.PositionRepository;
@@ -62,6 +63,7 @@ public class InterviewService {
     private final ReportAgent reportAgent;
     private final CoordinatorAgent coordinatorAgent;
     private final ReportDesensitizer reportDesensitizer;
+    private final InterviewSlotManager interviewSlotManager;
     private final ObjectMapper objectMapper;
 
     /**
@@ -80,6 +82,15 @@ public class InterviewService {
                 request.getPositionId(),
                 selectedPhases);
         Interview interview = prepared.interview();
+
+        // 占用并发槽位：超过上限时直接提示用户稍后重试，不进入等待队列
+        if (!interviewSlotManager.acquireSlot(interview.getId())) {
+            BusinessException busyException = new BusinessException(
+                    INTERVIEW_SERVER_BUSY.getCode(), "当前面试者过多，请稍后尝试");
+            compensateFailedCreation(userId, interview.getId(), busyException);
+            throw busyException;
+        }
+
         String firstQuestion;
         try {
             InterviewContext context = coordinatorAgent.initialize(
@@ -95,6 +106,7 @@ public class InterviewService {
             interview = creationStateService.completeFirstQuestion(
                     userId, interview.getId(), firstQuestion, context);
         } catch (RuntimeException e) {
+            interviewSlotManager.releaseSlot(interview.getId());
             compensateFailedCreation(userId, interview.getId(), e);
             throw e;
         }
@@ -167,6 +179,10 @@ public class InterviewService {
             TurnResult result = coordinatorAgent.coordinate(
                     context, interview, reserved.lastQuestion(), answer);
             turnStateService.complete(userId, reserved, answer, context, result);
+            // 面试自然结束到 ENDING 环节时释放槽位
+            if (result.getPhase() == InterviewPhase.ENDING) {
+                interviewSlotManager.releaseSlot(interviewId);
+            }
             return result;
         } catch (RuntimeException failure) {
             releaseFailedTurn(userId, interviewId, reserved.reservationToken(), failure);
@@ -199,14 +215,18 @@ public class InterviewService {
      */
     @Transactional
     public InterviewDetailResponse endInterview(Long userId, Long interviewId) {
-        Interview interview = findInterviewForUpdate(userId, interviewId);
-        if (interview.getStatus() == InterviewStatus.IN_PROGRESS) {
-            coordinatorAgent.endInterview(interview, true);
-            interview.setPendingQuestion(null);
-            interviewRepository.save(interview);
+        try {
+            Interview interview = findInterviewForUpdate(userId, interviewId);
+            if (interview.getStatus() == InterviewStatus.IN_PROGRESS) {
+                coordinatorAgent.endInterview(interview, true);
+                interview.setPendingQuestion(null);
+                interviewRepository.save(interview);
+            }
+            unlockResumeAndPosition(interview);
+            return toDetailResponse(interview);
+        } finally {
+            interviewSlotManager.releaseSlot(interviewId);
         }
-        unlockResumeAndPosition(interview);
-        return toDetailResponse(interview);
     }
 
     /**
