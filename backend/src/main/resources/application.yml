@@ -191,6 +191,9 @@ interview:
         - INTERVIEWER
 
 logging:
+  # 在不改变默认 INFO 级别的前提下，把请求和异步任务标识加入每条日志。
+  pattern:
+    level: "%5p [requestId=%X{requestId:-} taskId=%X{taskId:-} positionId=%X{positionId:-}]"
   level:
     com.interviewcoach: INFO
     org.springframework.security: WARN

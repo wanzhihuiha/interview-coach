@@ -1,5 +1,6 @@
 package com.interviewcoach.common.exception;
 
+import com.interviewcoach.common.observability.HttpRequestDiagnostics;
 import com.interviewcoach.common.response.ApiResponse;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -20,12 +21,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     /**
-     * 业务异常。
+     * 业务异常。没有底层 cause 的规则拒绝记 INFO；携带 cause 的处理失败记 WARN 和堆栈。
      */
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException e) {
-        log.warn("Business exception: code={}, message={}", e.getCode(), e.getMessage());
-        return ApiResponse.error(e.getCode(), e.getMessage());
+        if (e.getCause() == null) {
+            log.info("[Business] 请求被业务规则拒绝: code={}, message={}",
+                    e.getCode(), singleLine(e.getMessage()));
+        } else {
+            log.warn("[Business] 业务处理失败: code={}, message={}, rootType={}",
+                    e.getCode(), singleLine(e.getMessage()), rootType(e), e);
+        }
+        return error(e.getCode(), e.getMessage());
     }
 
     /**
@@ -37,7 +44,10 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining("; "));
-        return ApiResponse.error(400, message);
+        log.info("[HTTP] 请求参数校验失败: fields={}, message={}",
+                fieldNames(e.getBindingResult().getFieldErrors().stream().toList()),
+                singleLine(message));
+        return error(400, message);
     }
 
     /**
@@ -49,7 +59,9 @@ public class GlobalExceptionHandler {
         String message = e.getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining("; "));
-        return ApiResponse.error(400, message);
+        log.info("[HTTP] 请求参数绑定失败: fields={}, message={}",
+                fieldNames(e.getFieldErrors()), singleLine(message));
+        return error(400, message);
     }
 
     /**
@@ -58,7 +70,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleIllegalArgumentException(IllegalArgumentException e) {
-        return ApiResponse.error(400, e.getMessage());
+        log.info("[HTTP] 请求参数非法: message={}", singleLine(e.getMessage()));
+        return error(400, e.getMessage());
     }
 
     /**
@@ -67,7 +80,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleIllegalStateException(IllegalStateException e) {
-        return ApiResponse.error(400, e.getMessage());
+        log.warn("[HTTP] 请求触发非法状态: message={}", singleLine(e.getMessage()), e);
+        return error(400, e.getMessage());
     }
 
     /**
@@ -76,7 +90,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public ApiResponse<Void> handleAccessDeniedException(AccessDeniedException e) {
-        return ApiResponse.error(403, "无权访问");
+        log.warn("[Security] 请求被拒绝: errorType={}", e.getClass().getSimpleName());
+        return error(403, "无权访问");
     }
 
     /**
@@ -85,7 +100,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TokenRefreshException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ApiResponse<Void> handleTokenRefreshException(TokenRefreshException e) {
-        return ApiResponse.error(401, e.getMessage());
+        log.info("[Security] Token 续期失败: message={}", singleLine(e.getMessage()));
+        return error(401, e.getMessage());
     }
 
     /**
@@ -94,7 +110,36 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleException(Exception e) {
-        log.error("Unexpected error", e);
-        return ApiResponse.error(500, "系统繁忙，请稍后再试");
+        log.error("[HTTP] 未处理异常: errorType={}, rootType={}",
+                e.getClass().getSimpleName(), rootType(e), e);
+        return error(500, "系统繁忙，请稍后再试");
+    }
+
+    /**
+     * 构造错误响应的同时把业务码写回请求诊断上下文，供最外层 HTTP 结束日志判定结果。
+     */
+    private ApiResponse<Void> error(int code, String message) {
+        HttpRequestDiagnostics.setCurrentBusinessCode(code);
+        return ApiResponse.error(code, message);
+    }
+
+    private String fieldNames(java.util.List<FieldError> errors) {
+        return errors.stream().map(FieldError::getField).distinct().collect(Collectors.joining(","));
+    }
+
+    private String rootType(Throwable error) {
+        Throwable current = error;
+        for (int depth = 0; current.getCause() != null && depth < 20; depth++) {
+            current = current.getCause();
+        }
+        return current.getClass().getSimpleName();
+    }
+
+    private String singleLine(String message) {
+        if (message == null || message.isBlank()) {
+            return "-";
+        }
+        String value = message.replace("\r", "\\r").replace("\n", "\\n");
+        return value.length() <= 500 ? value : value.substring(0, 500) + "...(truncated)";
     }
 }
