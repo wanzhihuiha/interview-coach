@@ -15,7 +15,7 @@ spring:
     name: interview-coach
 
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:interview_coach}?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:interview_coach}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -63,11 +63,15 @@ spring:
 
 app:
   admin:
-    # 是否启动时自动初始化默认管理员账号（admin / Admin@1234）
-    init-enabled: true
+    # 默认不创建管理员；显式开启时必须通过环境变量提供账号和密码。
+    init-enabled: ${ADMIN_INIT_ENABLED:false}
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
+    nickname: ${ADMIN_NICKNAME:管理员}
 
 jwt:
-  secret: ${JWT_SECRET:please-change-this-secret-key-in-production}
+  # 不提供公共兜底密钥，缺失时应用会在启动阶段拒绝装配。
+  secret: ${JWT_SECRET}
   expiration-days: ${JWT_EXPIRATION_DAYS:7}
   # token 过期后的续期宽限期（分钟），用于面试等长会话不因 token 过期而中断
   refresh-grace-minutes: ${JWT_REFRESH_GRACE_MINUTES:60}
@@ -75,10 +79,10 @@ jwt:
 resume:
   upload:
     max-size: 10485760
-    storage-path: D:/trae_app_data/interview-coach/uploads/resumes
+    storage-path: ${RESUME_UPLOAD_PATH:./data/uploads/resumes}
   llm:
     # 简历分析智能体 LLM 配置
-    # 开发测试使用 CPA 提供的 OpenAI 兼容接口；启动前需填写 openai.api-key。
+    # 启用真实模型前，必须通过环境变量配置对应厂商的地址、模型和 API Key。
     enabled: ${RESUME_LLM_ENABLED:false}
     # LLM 调用超时时间（秒）
     timeout-seconds: 60
@@ -101,8 +105,8 @@ resume:
         type: OPENAI_COMPATIBLE
         enabled: ${OPENAI_ENABLED:false}
         api-key: ${OPENAI_API_KEY:}
-        base-url: ${OPENAI_BASE_URL:http://localhost:18717}
-        model: ${OPENAI_MODEL:gpt-5.6-sol}
+        base-url: ${OPENAI_BASE_URL:}
+        model: ${OPENAI_MODEL:}
       zhipu:
         type: OPENAI_COMPATIBLE
         enabled: false

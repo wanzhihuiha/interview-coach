@@ -11,6 +11,7 @@ import com.interviewcoach.user.domain.entity.User;
 import com.interviewcoach.user.domain.entity.UserProfile;
 import com.interviewcoach.user.domain.repository.UserProfileRepository;
 import com.interviewcoach.user.domain.repository.UserRepository;
+import com.interviewcoach.user.domain.service.UserPasswordPolicy;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -27,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]{4,20}$");
-    static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d@$!%*?&]{8,20}$");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
 
     private final UserRepository userRepository;
@@ -182,8 +182,9 @@ public class AuthService {
     }
 
     private void validatePassword(String password) {
-        if (password == null || !PASSWORD_PATTERN.matcher(password).matches()) {
-            throw new BusinessException(PASSWORD_FORMAT_INVALID, "密码格式错误，应为8-20位且包含字母和数字");
+        if (!UserPasswordPolicy.isValid(password)) {
+            throw new BusinessException(PASSWORD_FORMAT_INVALID,
+                    "密码格式错误，应为8-20位，至少包含一个字母和一个数字，且只能使用字母、数字及@$!%*?&");
         }
     }
 

@@ -6,7 +6,7 @@
 >
 > 每份简历最多一条辅助分析记录。该单行同时保留最近一次成功结果和当前任务控制字段，但两者不混用：接受新任务后旧结果仍可展示，立即停止参与新面试；新任务失败不会恢复其可用性。`feedback` 只存在于当前请求和内存调用链，不持久化、不写 Redis、不写日志。
 >
-> 当前开发部署仍为单应用实例；任务准入使用 Redisson 可过期分布式许可，Worker 使用 Java 21 虚拟线程，不设置业务等待队列。应用重启只将遗留内存任务标记失败并恢复可确认的 Redis 额度结算，不自动重放模型调用。数据库结构以 `V1__init_schema.sql`、`V2__resume_profile_draft_analysis.sql`、`V3__resume_ai_task_control.sql` 的顺序迁移为准，脚本由维护者手工执行。
+> 当前开发部署仍为单应用实例；任务准入使用 Redisson 可过期分布式许可，Worker 使用 Java 21 虚拟线程，不设置业务等待队列。应用重启只将遗留内存任务标记失败并恢复可确认的 Redis 额度结算，不自动重放模型调用。简历域结构由 `V1__init_schema.sql`、`V2__resume_profile_draft_analysis.sql`、`V3__resume_ai_task_control.sql` 建立；完整 MySQL 基线还包括岗位域的 `V4__position_analysis_lifecycle.sql`，所有脚本均由维护者按版本顺序手工执行。
 
 ---
 

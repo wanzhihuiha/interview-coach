@@ -46,7 +46,7 @@ interview-coach/
 
 ## 快速启动
 
-### 1. 准备数据库
+### 1. 准备数据库和环境变量
 
 创建默认数据库：
 
@@ -61,6 +61,7 @@ CREATE DATABASE interview_coach
 1. `backend/src/main/resources/db/migration/V1__init_schema.sql`
 2. `backend/src/main/resources/db/migration/V2__resume_profile_draft_analysis.sql`
 3. `backend/src/main/resources/db/migration/V3__resume_ai_task_control.sql`
+4. `backend/src/main/resources/db/migration/V4__position_analysis_lifecycle.sql`
 
 不要修改已经执行的版本化脚本。Hibernate 仅校验实体与表结构是否一致，不会自动创建或修改数据库结构。
 
@@ -73,21 +74,48 @@ CREATE DATABASE interview_coach
 | `MYSQL_DB` | 否 | 数据库名，默认 `interview_coach` |
 | `MYSQL_USER` | 建议设置 | MySQL 用户名 |
 | `MYSQL_PASSWORD` | 是 | MySQL 密码 |
+| `SPRING_DATASOURCE_URL` | 否 | 完整 JDBC URL 覆盖项；`characterEncoding` 使用 `UTF-8`，不能写 `utf8mb4` |
 | `REDIS_HOST` | 否 | Redis 地址，默认 `localhost` |
 | `REDIS_PORT` | 否 | Redis 端口，默认 `6379` |
 | `REDIS_PASSWORD` | 否 | Redis 密码，无密码时留空 |
 | `REDIS_DB` | 否 | Redis 逻辑库编号，默认 `0` |
-| `JWT_SECRET` | 建议设置 | JWT 签名密钥，应使用足够长的随机字符串 |
+| `JWT_SECRET` | 是 | JWT 签名密钥，UTF-8 编码后至少 32 字节（建议使用 32 个以上随机 ASCII 字符）；未设置或长度不足时后端无法启动 |
+| `ADMIN_INIT_ENABLED` | 否 | 是否在启动时初始化管理员，默认 `false`；只在首次创建管理员时临时设为 `true` |
+| `ADMIN_USERNAME` | 条件必需 | `ADMIN_INIT_ENABLED=true` 时必填，由使用者自行指定，不提供默认账号 |
+| `ADMIN_PASSWORD` | 条件必需 | `ADMIN_INIT_ENABLED=true` 时必填；必须为 8～20 位，至少包含一个字母和一个数字，只能使用字母、数字及 `@$!%*?&`；不提供默认密码，也不要提交到 Git |
+| `ADMIN_NICKNAME` | 否 | 管理员昵称，默认 `管理员` |
 
 PowerShell 示例：
 
 ```powershell
 $env:MYSQL_USER="root"
 $env:MYSQL_PASSWORD="<your-password>"
-$env:JWT_SECRET="<your-random-secret>"
+$env:JWT_SECRET="<32-or-more-random-ASCII-characters>"
 ```
 
-### 2. 启动后端
+### 2. 首次创建管理员（可选，只需执行一次）
+
+项目不提供固定的管理员账号和密码。如果需要使用管理后台，请自行设置以下环境变量，再启动后端：
+
+```powershell
+$env:ADMIN_INIT_ENABLED="true"
+$env:ADMIN_USERNAME="<your-admin-username>"
+$env:ADMIN_PASSWORD="<your-strong-password>"
+$env:ADMIN_NICKNAME="<your-admin-nickname>"
+```
+
+启动时会根据用户名执行以下处理：
+
+- 用户名不存在：创建管理员账号及其用户资料；两项数据要么一起创建成功，要么都不保存。
+- 同名管理员已存在：跳过创建，不修改原来的密码。
+- 同名普通用户已存在：拒绝启动，不会把普通用户自动提升为管理员。
+- 用户名或密码未填写，或密码格式不符合上述要求：拒绝启动，并提示具体配置问题。
+
+确认管理员已经创建并可以正常登录后，将 `ADMIN_INIT_ENABLED` 改为 `false` 或删除该变量，并从运行环境中移除 `ADMIN_PASSWORD`。后续启动默认不会再次执行管理员初始化。
+
+如果不需要管理后台，保持 `ADMIN_INIT_ENABLED=false` 或不设置该变量即可。
+
+### 3. 启动后端
 
 ```powershell
 cd backend
@@ -102,7 +130,7 @@ mvn spring-boot:run
 - `OPENAI_API_KEY`
 - `ZHIPU_API_KEY`
 
-### 3. 启动前端
+### 4. 启动前端
 
 另开一个终端：
 
@@ -116,12 +144,19 @@ npm run dev
 
 ## 本地配置说明
 
-`backend/src/main/resources/application-local.yml` 使用 H2 文件数据库，但当前包含开发机绝对路径，并启用了特定模型配置。使用 `local` Profile 前，请先将数据库和上传目录改为本机可写路径，并确认模型开关与 API Key 配置。
+仓库只提交 `backend/src/main/resources/application-local.example.yml`，其中使用 H2 文件数据库、相对数据目录，并默认关闭真实模型。首次使用时复制一份本地配置：
+
+```powershell
+Copy-Item backend/src/main/resources/application-local.example.yml backend/src/main/resources/application-local.yml
+$env:SPRING_PROFILES_ACTIVE="local"
+```
+
+实际的 `application-local.yml` 已被 Git 忽略，可以根据本机环境调整，但不要写入准备提交的内容。JWT、数据库密码和模型 API Key 等凭据仍应通过环境变量提供。
 
 ## 数据库结构管理
 
 - MySQL 表结构由人工执行的版本化 SQL 管理，脚本位于 `backend/src/main/resources/db/migration/`。
-- 当前新环境依次执行 `V1__init_schema.sql`、`V2__resume_profile_draft_analysis.sql`、`V3__resume_ai_task_control.sql`；后续结构变化继续追加更高版本脚本。
+- 当前新环境依次执行 `V1__init_schema.sql`、`V2__resume_profile_draft_analysis.sql`、`V3__resume_ai_task_control.sql`、`V4__position_analysis_lifecycle.sql`；后续结构变化继续追加更高版本脚本。
 - 已执行过的 SQL 文件不得修改，并应在部署记录中登记数据库已执行到的版本。
 - 默认配置使用 `spring.jpa.hibernate.ddl-auto=validate`，启动时只校验表结构。
 - `backend/src/main/resources/db/schema.sql` 是旧入口的废弃提示，不参与初始化。

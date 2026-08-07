@@ -2,10 +2,10 @@
 
 > 本文档同时保留当前迁移基线和早期概念设计。**唯一可执行、受版本管理的 MySQL 结构来源**是
 > `backend/src/main/resources/db/migration/` 中按顺序手工执行的版本化脚本：
-> `V1__init_schema.sql` → `V2__resume_profile_draft_analysis.sql` → `V3__resume_ai_task_control.sql`。
+> `V1__init_schema.sql` → `V2__resume_profile_draft_analysis.sql` → `V3__resume_ai_task_control.sql` → `V4__position_analysis_lifecycle.sql`。
 > 本文后续带 `sys_`、`res_`、`pos_` 等前缀的 ER、表结构和 DDL 是早期方案，与当前实体和真实表名不完全一致，禁止复制到数据库执行。
 
-### 当前简历画像迁移基线（V1 + V2 + V3）
+### 当前可执行迁移基线（V1 + V2 + V3 + V4）
 
 | 迁移 | 对象 | 变更与用途 |
 |------|------|------------|
@@ -17,6 +17,9 @@
 | V2 | `interview.user_profile_analysis` | 新增可空快照；创建面试时固定当时可用的辅助分析，缺失不阻断 |
 | V3 | `resume` | 新增 `parse_quota_date`、`parse_quota_token`，供手动事实解析额度崩溃恢复 |
 | V3 | `resume_profile_analysis` | 放宽结果 hash 可空约束，并新增独立任务、首次资格、面试可用性和额度恢复字段 |
+| V4 | `position`、`sys_user` | 新增岗位归档时间、活跃岗位查询索引和用户最后提交岗位分析时间 |
+| V4 | `interview` | 新增岗位名称、公司名称、岗位大类快照和岗位状态查询索引 |
+| V4 | `position_analysis_task` | 新表，每个岗位唯一一行，保存岗位分析排队、运行、成功和失败生命周期 |
 
 #### V3 单行辅助分析字段语义
 
@@ -34,7 +37,9 @@
 
 `resume_profile_analysis` 仍由 `resume_id` 唯一约束保证每份简历最多一行，不新增历史版本或持久任务队列表，也不持久化 `feedback`。最终结果写回由应用同时校验 `userId + task_generation + task_profile_hash + 当前正式事实 hash`。V3 只追加列并放宽 `source_profile_hash` 可空约束，不修改已经执行的 V2，也不回填或删除业务正文。
 
-迁移脚本继续由维护者手工执行。启动包含 V3 实体映射的新代码前，应先确认目标库、备份/回滚入口和三份脚本的执行状态，再显式验证 Hibernate `ddl-auto=validate`；文档静态核对不能替代目标 MySQL 验证。
+V4 不修改简历分析表。它为岗位异步解析、归档和面试岗位快照增加持久结构；由于面试快照列非空且 V4 不回填旧开发数据，执行前应按 [`position-module.md`](position-module.md#13-v4-手工执行说明) 清理无需保留的旧开发数据或重建开发库。
+
+迁移脚本继续由维护者手工执行。启动包含当前实体映射的新代码前，应先确认目标库、备份/回滚入口和四份脚本的执行状态，再显式验证 Hibernate `ddl-auto=validate`；文档静态核对不能替代目标 MySQL 验证。
 
 ---
 
@@ -1012,6 +1017,7 @@ CREATE TABLE inf_llm_call_log (
 
 ---
 
-*文档版本：v0.4*
+*文档版本：v0.5*
 *创建时间：2026-07-20*
-*更新说明：明确 V1→V2→V3 可执行基线，补充 V3 单行分析状态语义，并将旧前缀 ER/DDL 标记为不可执行的概念参考*
+*更新时间：2026-08-06*
+*更新说明：将 V4 岗位分析生命周期、岗位归档和面试快照纳入当前可执行基线，并保留旧前缀 ER/DDL 为不可执行的概念参考*

@@ -24,10 +24,22 @@ Thumbs.db
 .env
 .env.*
 !.env.example
-backend/src/main/resources/application-local.yml
+/backend/src/main/resources/application-local.yml
 
-# Local agent instructions
+# Local agent instructions and work records
 /AGENTS.md
+/wzh_goal/
+/wzh-grill-me-md/
+
+# Local deployment files and generated release packages
+/deploy/
+/.dockerignore
+
+# Local scratch files and one-off diagnostics
+/tmp/
+/answer_response.txt
+/backend/maven-version.txt
+/backend/settings.xml
 
 # The actual frontend package lives in frontend/web/.
 /frontend/package-lock.json

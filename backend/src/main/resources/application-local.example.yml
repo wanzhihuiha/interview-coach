@@ -1,0 +1,42 @@
+# Local Profile 的可提交示例。
+#
+# 使用方法：
+# 1. 将本文件复制为同目录下的 application-local.yml。
+# 2. 设置 JWT_SECRET 等环境变量，不要在 YAML 中写入真实密码、密钥或令牌。
+# 3. 使用 --spring.profiles.active=local 或 SPRING_PROFILES_ACTIVE=local 启动后端。
+#
+# application-local.yml 已被 Git 忽略，可以按本机情况调整路径和模型配置。
+
+spring:
+  datasource:
+    # 使用相对路径，避免把开发机盘符或用户目录提交到仓库。
+    url: jdbc:h2:file:./data/h2/interview-coach;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      # 本地数据跨重启保留；需要重建时由开发者临时调整，完成后恢复为 update。
+      ddl-auto: update
+    show-sql: true
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  sql:
+    init:
+      # 不自动执行仓库中的演示数据，避免生成固定测试账号；用户和管理员均按正常流程创建。
+      mode: never
+
+jwt:
+  # 必须由本地环境提供至少 32 字节的随机值。
+  secret: ${JWT_SECRET}
+
+resume:
+  upload:
+    storage-path: ${RESUME_UPLOAD_PATH:./data/uploads/resumes}
+  llm:
+    # 默认使用 Mock；启用真实模型时再通过环境变量提供厂商地址、模型和 API Key。
+    enabled: ${RESUME_LLM_ENABLED:false}

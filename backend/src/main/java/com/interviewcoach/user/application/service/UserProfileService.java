@@ -10,6 +10,7 @@ import com.interviewcoach.user.domain.entity.User;
 import com.interviewcoach.user.domain.entity.UserProfile;
 import com.interviewcoach.user.domain.repository.UserProfileRepository;
 import com.interviewcoach.user.domain.repository.UserRepository;
+import com.interviewcoach.user.domain.service.UserPasswordPolicy;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -70,8 +71,9 @@ public class UserProfileService {
         if (!newPassword.equals(confirmPassword)) {
             throw new BusinessException(PASSWORD_NOT_MATCH, "两次密码输入不一致");
         }
-        if (!AuthService.PASSWORD_PATTERN.matcher(newPassword).matches()) {
-            throw new BusinessException(PASSWORD_FORMAT_INVALID, "密码格式错误，应为8-20位且包含字母和数字");
+        if (!UserPasswordPolicy.isValid(newPassword)) {
+            throw new BusinessException(PASSWORD_FORMAT_INVALID,
+                    "密码格式错误，应为8-20位，至少包含一个字母和一个数字，且只能使用字母、数字及@$!%*?&");
         }
 
         User user = findUserById(userId);

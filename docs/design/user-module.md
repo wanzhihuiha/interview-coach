@@ -170,6 +170,8 @@ public enum ConsentType {
 
 #### Token 校验
 
+> **当前实现差异（2026-08-06）**：`SecurityConfig` 尚未配置自定义 `AuthenticationEntryPoint`。缺少或无效 Token 的请求会以匿名身份继续，由 Spring Security 默认返回 HTTP `403`；`JwtAuthenticationFilter` 当前也不查询用户状态。下表和 5.7 节的 `401`、稳定错误码及用户状态检查仍是目标契约，不应当作现有实现或部署冒烟预期。
+
 | 项目 | 说明 |
 |------|------|
 | **校验内容** | 签名、过期时间、用户状态 |

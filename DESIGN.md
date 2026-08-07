@@ -7,7 +7,7 @@
 >
 > 每份简历只保留一条辅助分析记录，但其中“最近一次成功结果”与“当前任务”使用独立字段。接受新的辅助分析任务后旧结果仍可展示，但立即停止参与新面试；新任务失败不会恢复其可用性。当前不做画像或分析历史版本、标签平台、持久任务队列，也不持久化用户的分析调整意见。
 >
-> 当前开发部署仍为单应用实例，但 AI 任务准入使用 Redisson 分布式许可（每用户 5、每简历 1），Worker 使用 Java 21 虚拟线程；手动 AI 任务和简历创建数量使用 Redis Lua 原子额度。应用重启只失败遗留内存任务并恢复可确认的额度结算，不自动重放模型调用。详细实现以 `docs/design/resume-module.md` 为准；MySQL 可执行基线依次为 `V1__init_schema.sql`、`V2__resume_profile_draft_analysis.sql`、`V3__resume_ai_task_control.sql`，迁移继续由维护者手工执行。
+> 当前开发部署仍为单应用实例，但 AI 任务准入使用 Redisson 分布式许可（每用户 5、每简历 1），Worker 使用 Java 21 虚拟线程；手动 AI 任务和简历创建数量使用 Redis Lua 原子额度。应用重启只失败遗留内存任务并恢复可确认的额度结算，不自动重放模型调用。详细实现以 `docs/design/resume-module.md` 为准；MySQL 可执行基线依次为 `V1__init_schema.sql`、`V2__resume_profile_draft_analysis.sql`、`V3__resume_ai_task_control.sql`、`V4__position_analysis_lifecycle.sql`，迁移继续由维护者手工执行。
 >
 > 本文其余章节同时保留部分早期目标架构和演进设想；与当前简历模块实现冲突时，以上基线、模块详细设计和当前代码优先。
 
