@@ -28,8 +28,6 @@ Thumbs.db
 
 # Local agent instructions and work records
 /AGENTS.md
-/wzh_goal/
-/wzh-grill-me-md/
 
 # Local deployment files and generated release packages
 /deploy/
