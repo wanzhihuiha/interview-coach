@@ -8,7 +8,8 @@ import com.interviewcoach.interview.domain.model.NextAction;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Skill 抽象基类，封装通用评估信号提取和计数器更新逻辑。
+ * Skill 抽象基类，负责把已校验分数转换成服务端评估事件，并维护连续优秀或困难计数。
+ * 模型不能直接提供事件、下一题深度或流程动作。
  */
 public abstract class AbstractInterviewSkill implements InterviewSkill {
 
@@ -26,16 +27,19 @@ public abstract class AbstractInterviewSkill implements InterviewSkill {
         return supportedPhase == phase;
     }
 
+    /**
+     * 根据五项分数的平均值生成固定事件：85 分及以上为优秀，低于 55 分为困难，其余为中性。
+     * {@code result} 为空时返回继续追问的中性信号，不从缺失结果中猜测分数。
+     */
     @Override
     public EvaluationSignal extractSignal(EvaluationResult result) {
         EvaluationSignal signal = new EvaluationSignal();
         if (result == null) {
-            signal.setSuggestedNextDepth(1);
             signal.setContinueProbing(true);
             return signal;
         }
-        signal.setSuggestedNextDepth(clamp(result.getSuggestedNextDepth(), 1, 5));
         int avg = average(result);
+        // 事件名称和阈值由服务端固定，模型评价文本即使包含类似字样也不会改变事件。
         if (avg >= 85) {
             signal.setKeyEventType("EXCELLENT");
         } else if (avg < 55) {
@@ -46,6 +50,10 @@ public abstract class AbstractInterviewSkill implements InterviewSkill {
         return signal;
     }
 
+    /**
+     * 只根据服务端派生事件更新连续计数；中性事件会同时清零两种连续状态。
+     * 主流程仅在评估结果合法时调用本方法，因此评估失败不会改动这些计数。
+     */
     @Override
     public void updateCounters(InterviewContext context, EvaluationSignal signal) {
         String event = signal.getKeyEventType();
@@ -71,6 +79,9 @@ public abstract class AbstractInterviewSkill implements InterviewSkill {
         return NextAction.NEXT_PHASE;
     }
 
+    /**
+     * 只对非空分数求整数平均值。正常安全评估包含全部五项；若其他调用方传入全空结果，沿用默认 70 分。
+     */
     protected int average(EvaluationResult r) {
         int sum = 0;
         int count = 0;
@@ -82,8 +93,4 @@ public abstract class AbstractInterviewSkill implements InterviewSkill {
         return count == 0 ? 70 : sum / count;
     }
 
-    protected int clamp(Integer value, int min, int max) {
-        if (value == null) return min;
-        return Math.max(min, Math.min(max, value));
-    }
 }

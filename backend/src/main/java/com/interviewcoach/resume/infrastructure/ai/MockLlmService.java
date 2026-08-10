@@ -14,14 +14,32 @@ import org.springframework.stereotype.Service;
 @ConditionalOnProperty(name = "resume.llm.enabled", havingValue = "false", matchIfMissing = true)
 public class MockLlmService implements LlmService {
 
+    /**
+     * 根据安全网关写入的服务端任务标识返回对应 JSON；未迁移任务继续使用原有提示词特征匹配。
+     */
     @Override
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.REPORT,
             AgentType.COACH, AgentType.RESUME_ANALYSIS, AgentType.JD_ANALYSIS})
     public String chat(String systemPrompt, String userPrompt) {
         log.warn("[MockLlmService] LLM is disabled, returning mock JSON");
+        // 安全任务只读取可信 systemPrompt 中的任务标识，不能让 DATA_ONLY 用户文本选择 Mock 返回结构。
         if (systemPrompt != null
                 && systemPrompt.contains("[SERVER_TASK_TYPE=INTERVIEW_QUESTION_GENERATION]")) {
             return "{\"question\":\"请结合一次实际经历，说明你如何分析并解决其中的关键问题。\"}";
+        }
+        if (systemPrompt != null
+                && systemPrompt.contains("[SERVER_TASK_TYPE=INTERVIEW_ANSWER_EVALUATION]")) {
+            return """
+                    {
+                      "overall": "一般",
+                      "technicalDepth": 70,
+                      "technicalBreadth": 70,
+                      "practicalExperience": 70,
+                      "expression": 70,
+                      "learningAbility": 70,
+                      "comment": "本地模拟评估结果。"
+                    }
+                    """;
         }
         if (userPrompt != null
                 && userPrompt.contains("\"requiredSkills\"")

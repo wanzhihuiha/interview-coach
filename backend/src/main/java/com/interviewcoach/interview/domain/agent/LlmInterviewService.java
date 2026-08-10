@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 /**
  * 面试模块 LLM 调用入口。
  *
- * <p>旧 {@link #chat(String, String)} 暂时服务尚未迁移的评估与报告 Agent；新出题路径只能调用
+ * <p>旧 {@link #chat(String, String)} 暂时服务尚未迁移的报告 Agent；已迁移的出题和回答评估路径调用
  * {@link #execute(LlmTaskInput, Class)}，并在同一入口内复用现有权限和 Redis 限流。</p>
  */
 @Component
@@ -29,6 +29,9 @@ public class LlmInterviewService {
     private final InterviewLlmRateLimiter rateLimiter;
     private final SafeLlmGateway safeLlmGateway;
 
+    /**
+     * 复用现有模型服务和限流器组装安全网关；网关最终仍通过本类的受限传输方法调用模型。
+     */
     public LlmInterviewService(
             LlmService llmService,
             InterviewLlmRateLimiter rateLimiter,
@@ -41,6 +44,9 @@ public class LlmInterviewService {
                 definitionRegistry, riskDetector, objectMapper, this::safeTransportChat);
     }
 
+    /**
+     * 尚未迁移任务使用的旧调用入口，只提供 Agent 权限和限流，不包含 DATA_ONLY 隔离与结构化响应校验。
+     */
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.REPORT,
             AgentType.COACH, AgentType.RESUME_ANALYSIS, AgentType.JD_ANALYSIS})
     public String chat(String systemPrompt, String userPrompt) {
@@ -48,9 +54,9 @@ public class LlmInterviewService {
     }
 
     /**
-     * 面试出题使用的类型化安全入口。当前只允许 INTERVIEWER，后续任务迁移时再按任务扩展权限。
+     * 面试出题和回答评估使用的类型化安全入口；任务类型和响应类型仍由任务注册器双重校验。
      */
-    @AgentPermission(AgentType.INTERVIEWER)
+    @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR})
     public <P, O> LlmExecutionResult<O> execute(
             LlmTaskInput<P> input, Class<O> expectedResponseType) {
         return safeLlmGateway.execute(input, expectedResponseType);
@@ -73,6 +79,7 @@ public class LlmInterviewService {
         }
     }
 
+    /** 在真正调用模型前按提示词估算令牌并执行 Redis 限流，旧入口和安全入口共用该限制。 */
     private String rateLimitedChat(String systemPrompt, String userPrompt) {
         int estimatedTokens = rateLimiter.estimateTokens(systemPrompt, userPrompt);
         if (!rateLimiter.tryAcquire(estimatedTokens)) {

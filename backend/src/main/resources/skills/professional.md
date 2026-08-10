@@ -21,9 +21,9 @@ userInvocable: false
 | 工具 | 用途 |
 |---|---|
 | `generateProfessionalQuestion` | 生成当前主题、当前深度的专业问题 |
-| `evaluateAnswer` | 评估回答质量，输出 `suggestedNextDepth` 和 `shouldSwitchTopic` |
+| `evaluateAnswer` | 评估回答质量，只输出整体等级、五项分数和简短评价 |
 | `generateTopicTransition` | 切换主题时生成自然过渡语与新主题首题 |
-| `decideNextAction` | 根据评估信号和计数器决定追问/切换主题/切换环节 |
+| `decideNextAction` | 根据服务端计算的评估事件和计数器决定追问/切换主题/切换环节 |
 
 ## 执行流程
 
@@ -42,16 +42,23 @@ userInvocable: false
   - 距离上次评估已过去 2 题
   - 当前主题追问数达到上限
   - 连续失败或连续优秀达到 2 次
-- 提取 `suggestedNextDepth` 和 `shouldSwitchTopic`。
+- 模型只能返回整体等级、五项 0-100 整数分数和简短评价，不能返回下一题深度、主题切换或结束动作。
+- 服务端计算五项平均分：平均分大于等于 85 记为 `EXCELLENT`，低于 55 记为 `STRUGGLED`，其余不产生质量事件。
+- 评估失败时不猜分、不产生质量事件，也不修改连续优秀或连续失败计数。
 
 ### 4. 决策 🔴
 调用 `decideNextAction`，优先级如下：
-1. `shouldSwitchTopic == true` → 切换主题（无下一个主题则切换环节）
+1. 服务端已经产生换主题信号 → 切换主题（无下一个主题则切换环节）
 2. `consecutiveFailures >= 2 && currentDepth <= 1` → 切换主题
 3. `currentTopicFollowUpCount >= maxFollowUpPerTopic` → 切换主题
 4. `currentDepth >= 5` → 切换主题
 5. `totalQuestionCount >= maxQuestions` → 切换环节或结束面试
 6. 否则 → 当前主题内继续追问
+
+继续追问时，下一题深度完全由服务端调整：
+- `EXCELLENT`：在 L1-L5 范围内升一级。
+- `STRUGGLED`：在 L1-L5 范围内降一级。
+- 无质量事件或评估失败：保持当前深度。
 
 ### 5. 切换主题/环节 🔴
 - 切换主题时调用 `generateTopicTransition`。
@@ -84,8 +91,8 @@ userInvocable: false
 ## 底线规则
 - 严禁凭岗位描述臆造技术点，必须从 `probingDirections` 出发生成主题。
 - 只生成服务端指定主题和深度的问题，不得自行改变主题、深度或面试流程。
-- 每个主题必须从 L1 开始，根据评估结果决定是否递进，不得直接跳级。
-- 回答过差时必须降级或切换主题，不得继续高压追问。
+- 每个主题必须从 L1 开始，由服务端根据合法评估分数逐级调整，不得直接跳级。
+- 回答困难时由服务端降一级；已在 L1 且连续困难达到 2 次时切换主题。
 - 主题耗尽后必须切换环节，不得反复追问同一主题。
 
 ## 不做的事

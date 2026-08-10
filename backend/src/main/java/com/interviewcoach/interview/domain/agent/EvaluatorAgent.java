@@ -1,23 +1,26 @@
 package com.interviewcoach.interview.domain.agent;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.interviewcoach.common.llm.LlmDataBlock;
+import com.interviewcoach.common.llm.LlmDataSource;
+import com.interviewcoach.common.llm.LlmExecutionResult;
+import com.interviewcoach.common.llm.LlmFailureType;
+import com.interviewcoach.common.llm.LlmTaskInput;
+import com.interviewcoach.common.llm.LlmTaskType;
 import com.interviewcoach.common.security.agent.AgentContext;
 import com.interviewcoach.common.security.agent.AgentType;
 import com.interviewcoach.interview.application.dto.QuestionBankItem;
 import com.interviewcoach.interview.domain.model.EvaluationResult;
-import com.interviewcoach.interview.domain.model.EvaluationSignal;
 import com.interviewcoach.interview.domain.model.InterviewContext;
 import com.interviewcoach.interview.infrastructure.tool.QuestionBankTool;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 评估者 Agent：负责评估候选人回答质量。
+ * 评估者 Agent：把单轮问题和回答作为无指令权限的数据提交到安全入口，只返回已校验的评分结果。
+ * 下一题深度、主题切换和结束状态不由本 Agent 决定。
  */
 @Slf4j
 @Component
@@ -26,42 +29,82 @@ public class EvaluatorAgent {
 
     private final LlmInterviewService llmService;
     private final QuestionBankTool questionBankTool;
-    private final ObjectMapper objectMapper;
 
+    /**
+     * 执行单轮回答评估；模型、安全检测或响应校验失败时返回 {@code null}。
+     * 安全入口完成一次执行后，仍沿用既有行为把本轮问题写入临时题库，写入失败不影响评估结果。
+     */
     public EvaluationResult evaluate(InterviewContext context, String question, String answer) {
         return AgentContext.runAs(AgentType.EVALUATOR, () -> {
-            String system = "你是一个专业的面试评估官，负责评估候选人的回答质量。只输出 JSON。";
-            StringBuilder user = new StringBuilder();
-            user.append("**面试上下文**\n");
-            if (context.getPositionProfile() != null && context.getPositionProfile().getBasicInfo() != null) {
-                user.append("- 岗位：").append(context.getPositionProfile().getBasicInfo().getTitle()).append("\n");
-            }
-            user.append("- 当前环节：").append(context.getCurrentPhase().getDisplayName()).append("\n");
-            if (context.getCurrentTopicName() != null) {
-                user.append("- 当前主题：").append(context.getCurrentTopicName()).append("\n");
-            }
-            user.append("- 问题：").append(question).append("\n");
-            user.append("- 候选人回答：").append(answer).append("\n");
-            user.append("\n评估要求：\n");
-            user.append("1. 判断回答质量：优秀/良好/一般/较差/很差\n");
-            user.append("2. 评估各维度得分（0-100）：technicalDepth、technicalBreadth、practicalExperience、expression、learningAbility\n");
-            user.append("3. 给出下一问题的建议深度（1-5）\n");
-            user.append("4. 如有突出亮点或明显不足，keyEvent 填 EXCELLENT/STRUGGLED，否则 null\n");
-            user.append("输出格式：{\"assessment\":{\"overall\":\"...\",\"technicalDepth\":80,...}}");
-
             try {
-                String response = llmService.chat(system, user.toString());
-                EvaluationResult result = parseEvaluation(response);
-                // 评估完成后，将本轮问题写入临时 RAG 供后续审核入库
+                // 岗位、主题、问题和回答都可能包含提示词攻击，只能作为无指令权限的数据块传入。
+                List<LlmDataBlock> dataBlocks = buildDataBlocks(context, question, answer);
+                // 面试环节和题目深度来自服务端状态机，可以作为可信任务参数约束模型。
+                InterviewAnswerEvaluationTaskDefinition.Parameters parameters =
+                        new InterviewAnswerEvaluationTaskDefinition.Parameters(
+                                context.getCurrentPhase(), context.getCurrentDepth());
+                LlmTaskInput<InterviewAnswerEvaluationTaskDefinition.Parameters> input =
+                        new LlmTaskInput<>(
+                                LlmTaskType.INTERVIEW_ANSWER_EVALUATION, parameters, dataBlocks);
+                LlmExecutionResult<EvaluationResult> executionResult =
+                        llmService.execute(input, EvaluationResult.class);
+                // 安全入口返回后，沿用原流程把本轮问题保存到临时题库，供后续人工审核是否入库。
                 saveQuestionToTemporaryRag(context, question);
-                return result;
+                // 只有安全网关明确返回成功时才把评分交给协调器；失败对象中不包含模型原文。
+                if (executionResult instanceof LlmExecutionResult.Success<?> success
+                        && success.value() instanceof EvaluationResult result) {
+                    return result;
+                }
+                LlmFailureType failureType = executionResult instanceof LlmExecutionResult.Failure<?> failure
+                        ? failure.failureType() : LlmFailureType.UNEXPECTED_FAILURE;
+                log.warn("[EvaluatorAgent] 本轮评估不可用: failureType={}", failureType);
             } catch (Exception e) {
-                log.warn("[EvaluatorAgent] LLM 评估失败，返回空评估: {}", e.getMessage());
-                return null;
+                log.warn("[EvaluatorAgent] 回答评估请求无效: errorType={}",
+                        e.getClass().getSimpleName());
             }
+            return null;
         });
     }
 
+    /**
+     * 组装无指令权限的数据块。来源枚举用于标记文本来自哪里，但不会提升文本的可信等级。
+     */
+    private List<LlmDataBlock> buildDataBlocks(
+            InterviewContext context, String question, String answer) {
+        List<LlmDataBlock> dataBlocks = new ArrayList<>();
+        if (context.getPositionProfile() != null
+                && context.getPositionProfile().getBasicInfo() != null) {
+            addOptionalDataBlock(
+                    dataBlocks,
+                    "position-title",
+                    LlmDataSource.MODEL_DERIVED_CONTENT,
+                    context.getPositionProfile().getBasicInfo().getTitle());
+        }
+        addOptionalDataBlock(
+                dataBlocks,
+                "current-topic",
+                LlmDataSource.MODEL_DERIVED_CONTENT,
+                context.getCurrentTopicName());
+        dataBlocks.add(new LlmDataBlock(
+                "question", LlmDataSource.INTERVIEW_QUESTION, question));
+        dataBlocks.add(new LlmDataBlock(
+                "answer", LlmDataSource.INTERVIEW_ANSWER, answer));
+        return dataBlocks;
+    }
+
+    private void addOptionalDataBlock(
+            List<LlmDataBlock> dataBlocks,
+            String blockId,
+            LlmDataSource source,
+            String text) {
+        if (text != null && !text.isBlank()) {
+            dataBlocks.add(new LlmDataBlock(blockId, source, text));
+        }
+    }
+
+    /**
+     * 尽力把有效问题写入临时题库。这是评估之外的附带写入：失败只记录告警，不能把评估改成失败。
+     */
     private void saveQuestionToTemporaryRag(InterviewContext context, String question) {
         try {
             if (question == null || question.isBlank()) {
@@ -82,90 +125,4 @@ public class EvaluatorAgent {
         }
     }
 
-    public EvaluationSignal extractSignal(EvaluationResult result) {
-        EvaluationSignal signal = new EvaluationSignal();
-        if (result == null) {
-            signal.setSuggestedNextDepth(1);
-            signal.setContinueProbing(true);
-            return signal;
-        }
-        signal.setSuggestedNextDepth(clampDepth(result.getSuggestedNextDepth()));
-        signal.setKeyEventType(result.getKeyEvent());
-        signal.setContinueProbing(!"STRUGGLED".equalsIgnoreCase(result.getKeyEvent()));
-        signal.setBriefComment(result.getComment());
-        return signal;
-    }
-
-    private EvaluationResult parseEvaluation(String json) {
-        if (json == null || json.isBlank()) {
-            return null;
-        }
-        try {
-            String cleaned = json.trim();
-            if (cleaned.startsWith("```")) {
-                cleaned = cleaned.replaceAll("^```(json)?\\s*", "").replaceAll("\\s*```$", "").trim();
-            }
-            Map<?, ?> root = objectMapper.readValue(cleaned, Map.class);
-            Object assessmentObj = root.get("assessment");
-            if (assessmentObj == null) {
-                return null;
-            }
-            Map<?, ?> assessment = (Map<?, ?>) assessmentObj;
-            EvaluationResult result = new EvaluationResult();
-            result.setOverall(toString(assessment.get("overall")));
-            result.setTechnicalDepth(toInt(assessment.get("technicalDepth")));
-            result.setTechnicalBreadth(toInt(assessment.get("technicalBreadth")));
-            result.setPracticalExperience(toInt(assessment.get("practicalExperience")));
-            result.setExpression(toInt(assessment.get("expression")));
-            result.setLearningAbility(toInt(assessment.get("learningAbility")));
-            result.setSuggestedNextDepth(clampDepth(toInt(assessment.get("suggestedNextDepth"))));
-            result.setKeyEvent(toString(assessment.get("keyEvent")));
-            result.setKeyEventReason(toString(assessment.get("keyEventReason")));
-            result.setComment(toString(assessment.get("comment")));
-            result.setStrengths(toStringList(assessment.get("strengths")));
-            result.setWeaknesses(toStringList(assessment.get("weaknesses")));
-            return result;
-        } catch (Exception e) {
-            log.warn("[EvaluatorAgent] 评估 JSON 解析失败: {}", e.getMessage());
-            return fallbackParse(json);
-        }
-    }
-
-    private EvaluationResult fallbackParse(String raw) {
-        EvaluationResult result = new EvaluationResult();
-        Matcher overall = Pattern.compile("\"overall\"\\s*:\\s*\"([^\"]+)\"").matcher(raw);
-        if (overall.find()) result.setOverall(overall.group(1));
-        Matcher depth = Pattern.compile("\"suggestedNextDepth\"\\s*:\\s*(\\d+)").matcher(raw);
-        if (depth.find()) result.setSuggestedNextDepth(clampDepth(Integer.parseInt(depth.group(1))));
-        Matcher keyEvent = Pattern.compile("\"keyEvent\"\\s*:\\s*\"([^\"]+)\"").matcher(raw);
-        if (keyEvent.find()) result.setKeyEvent(keyEvent.group(1));
-        return result;
-    }
-
-    private int clampDepth(Integer depth) {
-        if (depth == null) return 1;
-        return Math.max(1, Math.min(5, depth));
-    }
-
-    private String toString(Object obj) {
-        return obj == null ? null : obj.toString();
-    }
-
-    private int toInt(Object obj) {
-        if (obj == null) return 70;
-        if (obj instanceof Number n) return n.intValue();
-        try {
-            return Integer.parseInt(obj.toString());
-        } catch (NumberFormatException e) {
-            return 70;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> toStringList(Object obj) {
-        if (obj instanceof List<?> list) {
-            return list.stream().map(String::valueOf).toList();
-        }
-        return null;
-    }
 }

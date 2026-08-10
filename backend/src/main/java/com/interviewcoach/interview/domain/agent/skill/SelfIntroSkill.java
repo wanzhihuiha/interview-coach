@@ -35,7 +35,6 @@ public class SelfIntroSkill extends AbstractInterviewSkill {
     public EvaluationSignal extractSignal(EvaluationResult result) {
         // 本环节不评估，方法不会被调用
         EvaluationSignal signal = new EvaluationSignal();
-        signal.setSuggestedNextDepth(1);
         signal.setContinueProbing(true);
         return signal;
     }

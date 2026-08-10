@@ -27,6 +27,9 @@ public class ProfessionalSkill extends AbstractInterviewSkill {
         return interviewerAgent.generateProfessionalQuestion(context, null, null, 1);
     }
 
+    /**
+     * 当前回答序号距离上次评估序号达到 2，或到达主题追问上限、连续优秀/困难阈值时，触发一次评估。
+     */
     @Override
     public boolean needEvaluate(InterviewContext context, InterviewMessage answer) {
         int seq = answer.getSeqNo() == null ? 0 : answer.getSeqNo();
@@ -38,6 +41,9 @@ public class ProfessionalSkill extends AbstractInterviewSkill {
                 || context.getConsecutiveExcellence() >= 2;
     }
 
+    /**
+     * 按服务端数量、深度和连续困难规则决定追问、换主题或换环节；不会读取模型提供的流程字段。
+     */
     @Override
     public NextAction decideNextAction(InterviewContext context, EvaluationSignal signal) {
         if (Boolean.TRUE.equals(signal.getShouldSwitchTopic())) {
@@ -58,11 +64,20 @@ public class ProfessionalSkill extends AbstractInterviewSkill {
         return NextAction.FOLLOW_UP;
     }
 
+    /**
+     * 生成同一主题的下一题。优秀事件升一级，困难事件降一级，中性或评估失败保持当前深度。
+     */
     @Override
     public String generateNextQuestion(InterviewContext context, String previousQuestion,
                                        String previousAnswer, EvaluationSignal signal) {
-        int targetDepth = signal.getSuggestedNextDepth() != null
-                ? signal.getSuggestedNextDepth() : context.getCurrentDepth() + 1;
+        int currentDepth = context.getCurrentDepth() == null ? 1 : context.getCurrentDepth();
+        // 深度调整只使用服务端从已校验分数得到的固定事件，不接收模型建议的目标深度。
+        int targetDepth = currentDepth;
+        if ("EXCELLENT".equalsIgnoreCase(signal.getKeyEventType())) {
+            targetDepth = Math.min(5, currentDepth + 1);
+        } else if ("STRUGGLED".equalsIgnoreCase(signal.getKeyEventType())) {
+            targetDepth = Math.max(1, currentDepth - 1);
+        }
         context.setCurrentDepth(targetDepth);
         context.setCurrentTopicFollowUpCount(context.getCurrentTopicFollowUpCount() + 1);
         return interviewerAgent.generateProfessionalQuestion(context, previousQuestion, previousAnswer, targetDepth);
@@ -75,6 +90,9 @@ public class ProfessionalSkill extends AbstractInterviewSkill {
                 context.getCurrentTopicName(), context.getCurrentTopicId());
     }
 
+    /**
+     * 切换到岗位分析给出的下一个探查主题，并重置新主题的深度、追问数和连续质量计数。
+     */
     @Override
     public boolean switchToNextTopic(InterviewContext context) {
         List<PositionProfileData.ProbingDirection> directions = getDirections(context);
@@ -102,6 +120,7 @@ public class ProfessionalSkill extends AbstractInterviewSkill {
         return true;
     }
 
+    /** 使用岗位探查方向初始化首个主题；没有方向时使用不带岗位推断的“综合能力”主题。 */
     private void initTopics(InterviewContext context) {
         List<PositionProfileData.ProbingDirection> directions = getDirections(context);
         if (directions == null || directions.isEmpty()) {

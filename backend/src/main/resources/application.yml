@@ -186,9 +186,10 @@ interview:
         - COACH
         - RESUME_ANALYSIS
         - JD_ANALYSIS
-      # 类型化安全入口当前只迁移了面试官出题任务
+      # 类型化安全入口允许面试官出题和评估者评分，其他 Agent 仍按默认规则拒绝
       "LlmInterviewService.execute":
         - INTERVIEWER
+        - EVALUATOR
       # 示例：技能文档仅允许面试官访问
       "SkillsTool.getSkillPrompt":
         - INTERVIEWER
