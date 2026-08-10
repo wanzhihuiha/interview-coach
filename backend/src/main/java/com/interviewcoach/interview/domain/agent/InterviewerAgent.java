@@ -1,27 +1,35 @@
 package com.interviewcoach.interview.domain.agent;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.interviewcoach.common.llm.LlmDataBlock;
+import com.interviewcoach.common.llm.LlmDataSource;
+import com.interviewcoach.common.llm.LlmExecutionResult;
+import com.interviewcoach.common.llm.LlmFailureType;
+import com.interviewcoach.common.llm.LlmTaskInput;
+import com.interviewcoach.common.llm.LlmTaskType;
 import com.interviewcoach.common.security.agent.AgentContext;
 import com.interviewcoach.common.security.agent.AgentType;
 import com.interviewcoach.interview.application.dto.QuestionBankItem;
 import com.interviewcoach.interview.domain.entity.InterviewPhase;
-import com.interviewcoach.interview.domain.model.EvaluationSignal;
 import com.interviewcoach.interview.domain.model.InterviewContext;
 import com.interviewcoach.interview.infrastructure.tool.QuestionBankTool;
 import com.interviewcoach.interview.infrastructure.tool.SkillsTool;
-import com.interviewcoach.resume.domain.model.UserProfileData;
 import com.interviewcoach.resume.domain.model.ResumeProfileAnalysisData;
+import com.interviewcoach.resume.domain.model.UserProfileData;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 面试官 Agent：负责各环节问题生成。
+ * 面试官 Agent：由各环节 Skill 调用，按服务端状态构造类型化出题请求，并把已校验问题返回给面试流程。
+ * 模型不能决定阶段、主题、深度或结束状态；模型、安全检查或输入构造失败时只返回固定安全模板。
  */
 @Slf4j
 @Component
@@ -54,19 +62,19 @@ public class InterviewerAgent {
 
     public String generateSelfIntroQuestion(InterviewContext context) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
-            String skill = skillsTool.getSkillPrompt(InterviewPhase.SELF_INTRO);
-            String system = "你是一个专业的面试官，正在进行一场模拟面试。请严格遵循下方的【自我介绍 Skill 编排】生成问题。只输出 JSON。"
-                    + "\n\n【自我介绍 Skill 编排】\n" + skill;
-            String user = buildContextPrompt(context)
-                    + "\n当前已提问数：" + (context.getSelfIntroQuestionCount() == null ? 0 : context.getSelfIntroQuestionCount())
-                    + "\n请生成一道自我介绍引导问题，要求：\n"
-                    + "1. 让候选人介绍背景、工作经历和擅长的技术领域\n"
-                    + "2. 自然、友好，帮助候选人放松\n"
-                    + "输出格式：{\"question\":\"...\"}";
-            return extractQuestion(llmService.chat(system, user));
+            return generateQuestion(
+                    InterviewQuestionKind.SELF_INTRO,
+                    () -> InterviewQuestionRequest.selfIntro(
+                            context.getSelfIntroQuestionCount() == null
+                                    ? 0 : context.getSelfIntroQuestionCount()),
+                    () -> buildPositionDataBlocks(context, false));
         });
     }
 
+    /**
+     * 首题优先沿用既有永久题库采样；需要模型生成时，当前主题以及追问所需的上一问答都作为
+     * DATA_ONLY 数据提交，目标深度仍由服务端参数固定。
+     */
     public String generateProfessionalQuestion(InterviewContext context, String previousQuestion,
                                                 String previousAnswer, int targetDepth) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
@@ -80,27 +88,32 @@ public class InterviewerAgent {
                 }
             }
 
-            String skill = skillsTool.getSkillPrompt(InterviewPhase.PROFESSIONAL);
-            String system = "你是一个资深的技术面试官，擅长通过递进式提问探测候选人真实技术水平。请严格遵循下方的【专业面试 Skill 编排】生成问题。只输出 JSON。"
-                    + "\n\n【专业面试 Skill 编排】\n" + skill;
-            StringBuilder user = new StringBuilder(buildContextPrompt(context));
-            user.append("\n当前环节：专业面试");
-            user.append("\n当前主题：").append(context.getCurrentTopicName());
-            user.append("\n目标深度：L").append(targetDepth);
-            if (previousQuestion != null) {
-                user.append("\n上一轮问题：").append(previousQuestion);
-                user.append("\n候选人回答：").append(previousAnswer);
-                user.append("\n请基于回答进行追问，探测更深层的理解和实践能力。");
-            } else {
-                user.append("\n这是当前主题的第一题，请从基础概念开始提问。");
-            }
-            user.append("\n深度说明：L1基础概念、L2选型决策、L3原理机制、L4实践踩坑、L5深度扩展。");
-            user.append("\n输出格式：{\"question\":\"...\",\"depth\":")
-                    .append(targetDepth).append(",\"topicId\":\"").append(context.getCurrentTopicId()).append("\"}");
-            return extractQuestion(llmService.chat(system, user.toString()));
+            InterviewQuestionKind kind = previousQuestion == null
+                    ? InterviewQuestionKind.PROFESSIONAL
+                    : InterviewQuestionKind.PROFESSIONAL_FOLLOW_UP;
+            return generateQuestion(
+                    kind,
+                    () -> previousQuestion == null
+                            ? InterviewQuestionRequest.professional(targetDepth)
+                            : InterviewQuestionRequest.professionalFollowUp(targetDepth),
+                    () -> {
+                        List<LlmDataBlock> blocks = buildPositionDataBlocks(context, true);
+                        addRequiredTextBlock(blocks, "current-topic", LlmDataSource.MODEL_DERIVED_CONTENT,
+                                context.getCurrentTopicName());
+                        if (previousQuestion != null) {
+                            addRequiredTextBlock(blocks, "previous-question", LlmDataSource.INTERVIEW_QUESTION,
+                                    previousQuestion);
+                            addRequiredTextBlock(blocks, "previous-answer", LlmDataSource.INTERVIEW_ANSWER,
+                                    previousAnswer);
+                        }
+                        return blocks;
+                    });
         });
     }
 
+    /**
+     * 保留既有永久题库读取路径；题库安全治理不属于本次 LLM 出题安全试点，采样异常时回到安全模型入口。
+     */
     private String sampleFromPermanentBank(InterviewContext context) {
         try {
             String jobCategory = context.getJobCategory() == null ? "GENERAL" : context.getJobCategory();
@@ -125,16 +138,20 @@ public class InterviewerAgent {
         return null;
     }
 
+    /**
+     * {@code nextTopicId} 继续由服务端调用链维护以兼容现有签名，但不发送给模型，也不允许模型修改。
+     */
     public String generateTopicTransition(InterviewContext context, String nextTopicName, String nextTopicId) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
-            String skill = skillsTool.getSkillPrompt(InterviewPhase.PROFESSIONAL);
-            String system = "你是一个专业的面试官，需要在面试过程中自然切换技术主题。请遵循下方的【专业面试 Skill 编排】中的切换要求。只输出 JSON。"
-                    + "\n\n【专业面试 Skill 编排】\n" + skill;
-            String user = buildContextPrompt(context)
-                    + "\n即将切换到的主题：" + nextTopicName
-                    + "\n要求：自然过渡，不要生硬切换；简单回顾上主题，引出新主题；从新主题的基础概念开始。"
-                    + "\n输出格式：{\"question\":\"过渡语+新主题第一题\"}";
-            return extractQuestion(llmService.chat(system, user));
+            return generateQuestion(
+                    InterviewQuestionKind.TOPIC_TRANSITION,
+                    InterviewQuestionRequest::topicTransition,
+                    () -> {
+                        List<LlmDataBlock> blocks = new ArrayList<>();
+                        addRequiredTextBlock(
+                                blocks, "next-topic", LlmDataSource.MODEL_DERIVED_CONTENT, nextTopicName);
+                        return blocks;
+                    });
         });
     }
 
@@ -143,69 +160,96 @@ public class InterviewerAgent {
             UserProfileData profile = context.getUserProfile();
             List<UserProfileData.ProjectExperience> projects = profile != null ? profile.getProjectExperience() : null;
             int index = context.getCurrentProjectIndex() != null ? context.getCurrentProjectIndex() : 0;
-            String projectName = (projects != null && index < projects.size()) ? projects.get(index).getName() : "你的项目";
-
-            String skill = skillsTool.getSkillPrompt(InterviewPhase.RESUME_DISCUSSION);
-            String system = "你是一个专业的面试官，正在进行简历探讨环节。请严格遵循下方的【简历探讨 Skill 编排】生成问题。只输出 JSON。"
-                    + "\n\n【简历探讨 Skill 编排】\n" + skill;
-            String user = buildContextPrompt(context)
-                    + "\n当前探讨项目：" + projectName
-                    + "\n项目索引：" + index
-                    + "\n要求：生成一个深入探讨项目细节的问题，涉及技术挑战、角色贡献、成果量化或技术选型。"
-                    + "\n输出格式：{\"question\":\"...\"}";
-            return extractQuestion(llmService.chat(system, user));
+            UserProfileData.ProjectExperience project = projects != null && index >= 0 && index < projects.size()
+                    ? projects.get(index) : null;
+            String projectName = project == null ? null : project.getName();
+            return generateQuestion(
+                    InterviewQuestionKind.RESUME_DISCUSSION,
+                    () -> InterviewQuestionRequest.resumeDiscussion(index),
+                    () -> {
+                        List<LlmDataBlock> blocks = buildPositionDataBlocks(context, true);
+                        addRequiredTextBlock(
+                                blocks, "current-project", LlmDataSource.VERIFIED_FACTS, projectName);
+                        return blocks;
+                    });
         });
     }
 
     public String generateBehavioralQuestion(InterviewContext context) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
-            String[] scenarios = {"团队协作", "问题解决", "成长学习", "领导力", "沟通表达"};
             int index = context.getCurrentBehavioralIndex() != null ? context.getCurrentBehavioralIndex() : 0;
-            String scenario = scenarios[index % scenarios.length];
-
-            String skill = skillsTool.getSkillPrompt(InterviewPhase.BEHAVIORAL);
-            String system = "你是一个专业的面试官，正在进行行为面试环节。请严格遵循下方的【行为面试 Skill 编排】生成问题。只输出 JSON。"
-                    + "\n\n【行为面试 Skill 编排】\n" + skill;
-            String user = buildContextPrompt(context)
-                    + "\n本次场景类型：" + scenario
-                    + "\n要求：生成一个 STAR 风格的问题，考察候选人的软技能和职业素养。"
-                    + "\n输出格式：{\"question\":\"...\"}";
-            return extractQuestion(llmService.chat(system, user));
+            return generateQuestion(
+                    InterviewQuestionKind.BEHAVIORAL,
+                    () -> InterviewQuestionRequest.behavioral(index),
+                    () -> buildPositionDataBlocks(context, false));
         });
     }
 
     public String generateEndingMessage(InterviewContext context) {
         return AgentContext.runAs(AgentType.INTERVIEWER, () -> {
-            String skill = skillsTool.getSkillPrompt(InterviewPhase.ENDING);
-            String system = "你是一个专业的面试官，面试即将结束。请严格遵循下方的【结束环节 Skill 编排】生成结束语。只输出 JSON。"
-                    + "\n\n【结束环节 Skill 编排】\n" + skill;
-            String user = buildContextPrompt(context)
-                    + "\n要求：生成一段结束语，总结面试并询问候选人是否有问题。"
-                    + "\n输出格式：{\"question\":\"...\"}";
-            return extractQuestion(llmService.chat(system, user));
+            return generateQuestion(
+                    InterviewQuestionKind.ENDING,
+                    InterviewQuestionRequest::ending,
+                    List::of);
         });
     }
 
-    private String buildContextPrompt(InterviewContext context) {
-        String positionName = "";
-        String positionLevel = "";
-        if (context.getPositionProfile() != null && context.getPositionProfile().getBasicInfo() != null) {
-            positionName = context.getPositionProfile().getBasicInfo().getTitle();
-            positionLevel = context.getPositionProfile().getBasicInfo().getLevel();
+    /**
+     * 所有模型失败、输入越界或安全拒绝都只返回固定模板，不使用模型原文改变面试流程。
+     */
+    private String generateQuestion(
+            InterviewQuestionKind fallbackKind,
+            Supplier<InterviewQuestionRequest> requestSupplier,
+            Supplier<List<LlmDataBlock>> dataBlocksSupplier) {
+        try {
+            InterviewQuestionRequest request = requestSupplier.get();
+            if (!skillsTool.hasSkill(request.kind().getSkillPhase())) {
+                log.warn("[InterviewerAgent] 面试 Skill 缺失，使用固定模板: kind={}", request.kind());
+                return SafeInterviewQuestionTemplates.forKind(fallbackKind);
+            }
+            LlmTaskInput<InterviewQuestionRequest> input = new LlmTaskInput<>(
+                    LlmTaskType.INTERVIEW_QUESTION_GENERATION,
+                    request,
+                    dataBlocksSupplier.get());
+            LlmExecutionResult<InterviewQuestionResponse> result = llmService.execute(
+                    input, InterviewQuestionResponse.class);
+            if (result instanceof LlmExecutionResult.Success<?> success
+                    && success.value() instanceof InterviewQuestionResponse response) {
+                return response.question();
+            }
+            LlmFailureType failureType = result instanceof LlmExecutionResult.Failure<?> failure
+                    ? failure.failureType() : LlmFailureType.UNEXPECTED_FAILURE;
+            log.warn("[InterviewerAgent] 模型出题不可用，使用固定模板: kind={}, failureType={}",
+                    fallbackKind, failureType);
+        } catch (RuntimeException e) {
+            log.warn("[InterviewerAgent] 面试题请求无效，使用固定模板: kind={}, errorType={}",
+                    fallbackKind, e.getClass().getSimpleName());
         }
-        return "**面试上下文**\n"
-                + "- 岗位：" + positionName + "\n"
-                + "- 岗位等级：" + positionLevel + "\n"
-                + "- 候选人：候选人"
-                + buildAnalysisHints(context.getUserProfileAnalysis());
+        return SafeInterviewQuestionTemplates.forKind(fallbackKind);
+    }
+
+    private List<LlmDataBlock> buildPositionDataBlocks(
+            InterviewContext context, boolean includeAnalysisHints) {
+        List<LlmDataBlock> blocks = new ArrayList<>();
+        if (context.getPositionProfile() != null && context.getPositionProfile().getBasicInfo() != null) {
+            addTextBlock(blocks, "position-title", LlmDataSource.MODEL_DERIVED_CONTENT,
+                    context.getPositionProfile().getBasicInfo().getTitle());
+            addTextBlock(blocks, "position-level", LlmDataSource.MODEL_DERIVED_CONTENT,
+                    context.getPositionProfile().getBasicInfo().getLevel());
+        }
+        if (includeAnalysisHints) {
+            addTextBlock(blocks, "analysis-hints", LlmDataSource.MODEL_DERIVED_CONTENT,
+                    buildAnalysisHintsJson(context.getUserProfileAnalysis()));
+        }
+        return blocks;
     }
 
     /**
-     * 分析内容只作为待验证选题线索，提示词中明确禁止将其当作既定能力结论。
+     * 只提取有限数量的辅助分析线索，并使用结构化 JSON 放入 MODEL_DERIVED_CONTENT 数据块。
      */
-    private String buildAnalysisHints(ResumeProfileAnalysisData analysis) {
+    private String buildAnalysisHintsJson(ResumeProfileAnalysisData analysis) {
         if (analysis == null) {
-            return "";
+            return null;
         }
         List<String> strengths = analysis.getStrengths() == null ? List.of()
                 : analysis.getStrengths().stream()
@@ -229,38 +273,37 @@ public class InterviewerAgent {
                 .limit(5)
                 .toList();
         if (strengths.isEmpty() && verificationPoints.isEmpty() && skillAssessments.isEmpty()) {
-            return "";
+            return null;
         }
-        return "\n- 可能优势（需通过回答验证）：" + String.join("；", strengths)
-                + "\n- 待验证能力点：" + String.join("；", verificationPoints)
-                + "\n- 推断技能水平（需验证）：" + String.join("；", skillAssessments)
-                + "\n以上内容只用于选题，不得直接作为评分或结论。";
+        Map<String, Object> hints = new LinkedHashMap<>();
+        hints.put("possibleStrengthsRequiringVerification", strengths);
+        hints.put("verificationPoints", verificationPoints);
+        hints.put("inferredSkillLevelsRequiringVerification", skillAssessments);
+        try {
+            return objectMapper.writeValueAsString(hints);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("面试分析线索无法序列化", e);
+        }
     }
 
-    private String extractQuestion(String json) {
-        if (json == null || json.isBlank()) {
-            return "请简要介绍一下自己。";
+    private void addTextBlock(
+            List<LlmDataBlock> blocks,
+            String blockId,
+            LlmDataSource source,
+            String text) {
+        if (text != null && !text.isBlank()) {
+            blocks.add(new LlmDataBlock(blockId, source, text));
         }
-        // 尝试直接解析 JSON
-        try {
-            String cleaned = json.trim();
-            if (cleaned.startsWith("```")) {
-                cleaned = cleaned.replaceAll("^```(json)?\\s*", "").replaceAll("\\s*```$", "").trim();
-            }
-            Map<?, ?> map = objectMapper.readValue(cleaned, Map.class);
-            Object question = map.get("question");
-            if (question != null) {
-                return question.toString();
-            }
-        } catch (Exception e) {
-            log.debug("[InterviewerAgent] JSON 解析失败，尝试正则提取: {}", e.getMessage());
+    }
+
+    private void addRequiredTextBlock(
+            List<LlmDataBlock> blocks,
+            String blockId,
+            LlmDataSource source,
+            String text) {
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("面试出题缺少必要数据块: " + blockId);
         }
-        // 兜底：尝试提取 "question" 字段值
-        Matcher matcher = Pattern.compile("\"question\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
-        if (matcher.find()) {
-            return matcher.group(1).replace("\\n", "\n");
-        }
-        // 最后的兜底：直接返回文本
-        return json.replaceAll("^```(json)?\\s*", "").replaceAll("\\s*```$", "").trim();
+        blocks.add(new LlmDataBlock(blockId, source, text));
     }
 }

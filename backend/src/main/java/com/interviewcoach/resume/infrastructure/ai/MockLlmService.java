@@ -19,6 +19,10 @@ public class MockLlmService implements LlmService {
             AgentType.COACH, AgentType.RESUME_ANALYSIS, AgentType.JD_ANALYSIS})
     public String chat(String systemPrompt, String userPrompt) {
         log.warn("[MockLlmService] LLM is disabled, returning mock JSON");
+        if (systemPrompt != null
+                && systemPrompt.contains("[SERVER_TASK_TYPE=INTERVIEW_QUESTION_GENERATION]")) {
+            return "{\"question\":\"请结合一次实际经历，说明你如何分析并解决其中的关键问题。\"}";
+        }
         if (userPrompt != null
                 && userPrompt.contains("\"requiredSkills\"")
                 && userPrompt.contains("\"probingDirections\"")) {
