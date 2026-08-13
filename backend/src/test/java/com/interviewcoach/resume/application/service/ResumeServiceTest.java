@@ -47,53 +47,73 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 验证简历应用服务在 Spring/H2 测试环境中的列表、详情、草稿确认、画像读取、重解析和删除编排。
+ *
+ * <p>简历与画像仓储使用事务内真实数据，Redis、同意、文件、用户锁和 AI 准入协作者以 Mock 隔离；本类不启动 Redis 或执行真实文件操作。</p>
+ */
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
 class ResumeServiceTest {
 
+    /** Spring 容器装配的被测简历应用服务。 */
     @Autowired
     private ResumeService resumeService;
 
+    /** 用于在测试事务内模拟解析任务认领、完成与失败的真实状态服务。 */
     @Autowired
     private ResumeParseStateService parseStateService;
 
+    /** 保存并读回简历聚合状态的 H2 测试仓储。 */
     @Autowired
     private ResumeRepository resumeRepository;
 
+    /** 保存并读回已确认事实画像的 H2 测试仓储。 */
     @Autowired
     private ResumeProfileRepository profileRepository;
 
+    /** 保存并读回待用户确认草稿的 H2 测试仓储。 */
     @Autowired
     private ResumeProfileDraftRepository draftRepository;
 
+    /** 保存并读回辅助分析结果与当前任务元数据的 H2 测试仓储。 */
     @Autowired
     private ResumeProfileAnalysisRepository analysisRepository;
 
+    /** 为草稿、正式画像及分析夹具读写 JSON 的容器内序列化器。 */
     @Autowired
     private ObjectMapper objectMapper;
 
+    /** 替代真实 Redis 访问，避免服务测试连接外部缓存。 */
     @MockBean
     private StringRedisTemplate redisTemplate;
 
+    /** 隔离隐私协议前置校验，使场景聚焦简历编排。 */
     @MockBean
     private ConsentService consentService;
 
+    /** 隔离真实文件删除副作用。 */
     @MockBean
     private FileStorageService fileStorageService;
 
+    /** 模拟用户级变更锁，并在当前测试事务线程内直接执行受保护动作。 */
     @MockBean
     private ResumeUserMutationLock mutationLock;
 
+    /** 模拟 AI 双级许可；默认拒绝可选首次分析，手工重解析场景再显式放行。 */
     @MockBean
     private ResumeAiTaskAdmissionService admissionService;
 
+    /** 模拟手工 AI 任务的每日额度预留。 */
     @MockBean
     private ResumeAiQuotaService quotaService;
 
+    /** 隔离未进入 Worker 时的许可释放协作者。 */
     @MockBean
     private ResumeAiTaskLeaseRunner leaseRunner;
 
+    /** 每例让用户锁包装的动作在本线程执行，并默认拒绝可选 AI 许可，防止测试产生异步任务。 */
     @BeforeEach
     void allowUserMutationWithinTestTransaction() {
         doAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get())

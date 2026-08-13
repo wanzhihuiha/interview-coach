@@ -39,26 +39,46 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * 验证简历上传服务对协议、用户锁、每日创建额度、文件落盘、数据库登记、AI 许可、事件交接和逆向补偿的编排。
+ *
+ * <p>所有外部协作者均为 Mock；固定创建预留和任务租约只代表默认成功场景，用例不执行真实文件、Redis、数据库或事件监听器。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeUploadServiceTest {
 
+    /** 模拟用户已保留简历数量查询。 */
     @Mock private ResumeRepository resumeRepository;
+    /** 模拟 PENDING 简历登记及失败补偿删除。 */
     @Mock private ResumePersistenceService persistenceService;
+    /** 模拟上传文件落盘和补偿删除。 */
     @Mock private FileStorageService fileStorageService;
+    /** 模拟上传前所需隐私协议校验。 */
     @Mock private ConsentService consentService;
+    /** 模拟串行化同一用户简历变更的锁。 */
     @Mock private ResumeUserMutationLock mutationLock;
+    /** 模拟每日创建额度的预留、提交和释放。 */
     @Mock private ResumeDailyCreationQuotaService creationQuotaService;
+    /** 模拟数据库登记后取得用户与简历两级 AI 许可。 */
     @Mock private ResumeAiTaskAdmissionService admissionService;
+    /** 模拟事件未成功进入 Worker 时释放许可。 */
     @Mock private ResumeAiTaskLeaseRunner leaseRunner;
+    /** 模拟把必需解析任务交给事务后监听器。 */
     @Mock private ApplicationEventPublisher eventPublisher;
+    /** 提供文件名、大小和内容状态的上传文件 Mock。 */
     @Mock private MultipartFile file;
 
+    /** 使用默认值参与保留数量和 AI 准入策略的测试配置。 */
     private final ResumeAiTaskProperties properties = new ResumeAiTaskProperties();
+    /** 固定日期与 token 的每日创建预留 fixture，不代表不可配置业务规则。 */
     private final CreationReservation creationReservation =
             new CreationReservation(LocalDate.of(2026, 7, 30), "create-token");
+    /** 固定许可 ID 的任务租约 fixture，用于验证事件交接和补偿对象一致。 */
     private final ResumeAiTaskLease taskLease = new ResumeAiTaskLease("user-permit", "resume-permit");
+    /** 使用上述配置、fixture 和 Mock 构造的被测上传服务。 */
     private ResumeUploadService service;
 
+    /** 每例重建服务并建立可复用的 10 MiB 上限、锁内执行、非空 PDF 和创建预留默认场景。 */
     @BeforeEach
     void setUp() {
         service = new ResumeUploadService(

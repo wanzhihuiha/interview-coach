@@ -15,13 +15,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Agent 权限边界切面单元测试。
+ * 验证 Agent 权限切面的线程身份、注解允许列表、YAML 覆盖规则和总开关边界。
+ *
+ * <p>测试直接调用切面并使用空动态评估器集合，因而不覆盖具体 {@link PermissionEvaluator} 的业务判断。</p>
  */
 class AgentPermissionAspectTest {
 
+    /** 提供总开关及按目标方法覆盖注解允许列表的测试配置。 */
     private AgentPermissionProperties properties;
+    /** 使用测试配置和空动态评估器集合构造的被测权限切面。 */
     private AgentPermissionAspect aspect;
 
+    /** 每例重建权限配置和被测切面，并清空当前线程可能遗留的 Agent 身份。 */
     @BeforeEach
     void setUp() {
         properties = new AgentPermissionProperties();
@@ -32,6 +37,7 @@ class AgentPermissionAspectTest {
         AgentContextHolder.reset();
     }
 
+    /** 每例结束后清理 ThreadLocal Agent 身份，避免调用者上下文串入后续测试。 */
     @AfterEach
     void tearDown() {
         AgentContextHolder.reset();
@@ -128,7 +134,9 @@ class AgentPermissionAspectTest {
     }
 
     /**
-     * 测试用的目标类。
+     * 为切面生成与 YAML 规则一致的方法键，并向 JoinPoint Mock 提供目标方法元数据。
+     *
+     * <p>方法本身不承载权限逻辑，是否允许执行只由被测切面和模拟调用者上下文决定。</p>
      */
     @SuppressWarnings("unused")
     public static class Tool {

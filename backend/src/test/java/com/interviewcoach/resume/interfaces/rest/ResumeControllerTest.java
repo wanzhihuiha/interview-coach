@@ -9,6 +9,11 @@ import com.interviewcoach.resume.application.dto.ResumeProfileAnalysisRetryReque
 import com.interviewcoach.resume.application.service.ResumeService;
 import org.junit.jupiter.api.Test;
 
+/**
+ * 验证简历 Controller 将认证用户 ID、路径简历 ID 和辅助分析重试请求原样交给应用服务，并使用统一响应包装。
+ *
+ * <p>测试直接构造 Controller 和服务 Mock，不经过 Spring MVC 参数解析；缺失请求体是否有效由下游业务校验决定。</p>
+ */
 class ResumeControllerTest {
 
     @Test

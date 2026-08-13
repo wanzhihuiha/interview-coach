@@ -48,45 +48,64 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * 验证面试应用服务对报告缓存、简历事实快照、可用辅助分析和公共岗位的编排边界。
+ *
+ * <p>仓储、Agent 与脱敏器均以 Mock 隔离；本类关注服务选择哪些数据继续创建或恢复面试，不验证真实数据库、模型或 HTTP 接口。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class InterviewServiceTest {
 
+    /** 模拟面试聚合的归属查询、保存和继续面试读取。 */
     @Mock
     private InterviewRepository interviewRepository;
 
+    /** 模拟按面试读取已缓存报告的仓储。 */
     @Mock
     private InterviewReportRepository reportRepository;
 
+    /** 模拟恢复面试轮次时按顺序读取历史消息。 */
     @Mock
     private InterviewMessageRepository messageRepository;
 
+    /** 模拟按当前用户读取创建面试所用简历。 */
     @Mock
     private ResumeRepository resumeRepository;
 
+    /** 模拟读取已确认简历事实画像以生成面试快照。 */
     @Mock
     private ResumeProfileRepository resumeProfileRepository;
 
+    /** 模拟读取当前辅助分析及其是否可用于面试的状态视图。 */
     @Mock
     private ResumeProfileAnalysisStateService resumeProfileAnalysisStateService;
 
+    /** 模拟个人或已审核公共岗位的可访问查询及岗位锁相关保存。 */
     @Mock
     private PositionRepository positionRepository;
 
+    /** 模拟读取已确认岗位画像；缺失时服务仍可按当前用例继续创建。 */
     @Mock
     private PositionProfileRepository positionProfileRepository;
 
+    /** 隔离即时报告生成路径的报告 Agent Mock。 */
     @Mock
     private ReportAgent reportAgent;
 
+    /** 模拟面试上下文初始化、首题生成和后续轮次协调。 */
     @Mock
     private CoordinatorAgent coordinatorAgent;
 
+    /** 隔离报告返回前有限字段替换的脱敏器 Mock。 */
     @Mock
     private ReportDesensitizer reportDesensitizer;
 
+    /** 由上述协作者构造、供每个用例直接调用的被测应用服务。 */
     private InterviewService interviewService;
+    /** 序列化简历事实和辅助分析快照的测试 JSON 工具，同时传给被测服务。 */
     private ObjectMapper objectMapper;
 
+    /** 每例创建新的 JSON 工具和被测服务，复用由 MockitoExtension 重置的协作者 Mock。 */
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();

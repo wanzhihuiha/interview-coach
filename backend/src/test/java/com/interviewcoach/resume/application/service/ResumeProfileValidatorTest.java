@@ -8,8 +8,14 @@ import com.interviewcoach.resume.domain.model.UserProfileData;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
+/**
+ * 验证正式简历事实画像在确认前必须满足的最小有效内容边界。
+ *
+ * <p>测试直接校验内存画像，区分可接受的教育事实、完全空画像和仅含空嵌套对象的无效画像。</p>
+ */
 class ResumeProfileValidatorTest {
 
+    /** 无外部依赖的被测画像校验器，供本类用例共享。 */
     private final ResumeProfileValidator validator = new ResumeProfileValidator();
 
     @Test

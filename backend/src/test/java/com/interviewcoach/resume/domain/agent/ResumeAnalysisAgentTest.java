@@ -12,6 +12,11 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+/**
+ * 验证简历事实提取 Agent 的输入脱敏、模型调用前回调、事实 JSON 解析和非法输入失败边界。
+ *
+ * <p>模型服务均由内存桩替代；用例只观察发送文本和解析结果，不连接外部模型，也不把保留的学校或公司名称视为已完整脱敏证明。</p>
+ */
 class ResumeAnalysisAgentTest {
 
     @Test

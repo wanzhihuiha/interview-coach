@@ -18,13 +18,21 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * 验证简历每日创建额度的上海业务日期、超限返回码以及预留 token 提交与释放状态。
+ *
+ * <p>Redis 脚本执行器为 Mock；默认“每天五份”只通过返回码场景体现，具体上限仍来自可配置属性。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeDailyCreationQuotaServiceTest {
 
+    /** 模拟每日创建额度 Lua 脚本执行，不连接真实 Redis。 */
     @Mock private ResumeRedisScriptExecutor scriptExecutor;
 
+    /** 使用脚本 Mock、默认配置和固定时钟构造的被测创建额度服务。 */
     private ResumeDailyCreationQuotaService service;
 
+    /** 每例固定上海时区午夜后的时刻，确保额度日期可重复断言。 */
     @BeforeEach
     void setUp() {
         ResumeAiTaskProperties properties = new ResumeAiTaskProperties();

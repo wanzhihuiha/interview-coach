@@ -10,10 +10,13 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * 面试报告脱敏器单元测试。
+ * 验证面试报告有限字段中的完整公司名和候选人姓名字面替换边界。
+ *
+ * <p>用例只覆盖 strengths、weaknesses、conclusion 和 Markdown；它不证明简称、变体或其他敏感信息能够被识别。</p>
  */
 class ReportDesensitizerTest {
 
+    /** 无外部依赖的被测替换器，每例共享且不保存调用状态。 */
     private final ReportDesensitizer desensitizer = new ReportDesensitizer();
 
     @Test

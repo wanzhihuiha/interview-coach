@@ -30,20 +30,35 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+/**
+ * 验证简历解析 Worker 从文件提取、用户隔离缓存、模型事实提取、租约守卫、状态写回到额度结算的执行链。
+ *
+ * <p>文件、Redis、模型和状态服务均以 Mock 隔离；用例固定缓存降级、模型调用前计次和数据库成功后 Redis 失败时的失败关闭边界。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeParseWorkerTest {
 
+    /** 模拟任务认领、成功结果落库和失败状态写回。 */
     @Mock private ResumeParseStateService stateService;
+    /** 模拟从已登记文件路径提取简历文本。 */
     @Mock private ResumeTextExtractor textExtractor;
+    /** 模拟调用模型生成简历事实，并触发模型调用前回调。 */
     @Mock private ResumeAnalysisAgent resumeAnalysisAgent;
+    /** 模拟读取、删除和写入用户隔离解析缓存的 Redis 入口。 */
     @Mock private StringRedisTemplate redisTemplate;
+    /** 模拟具体缓存 Key 的字符串读写操作。 */
     @Mock private ValueOperations<String, String> valueOperations;
+    /** 模拟每日 AI 尝试与成功额度的状态转换。 */
     @Mock private ResumeAiQuotaService quotaService;
 
+    /** 序列化或反序列化缓存画像的真实测试 JSON 工具。 */
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** 每例启用的解析缓存配置，供被测 Worker 决定读取和回写缓存。 */
     private ResumeParseCacheProperties cacheProperties;
+    /** 使用上述真实工具、配置和 Mock 协作者构造的被测 Worker。 */
     private ResumeParseWorker worker;
 
+    /** 每例重建启用缓存的默认场景和被测 Worker，具体分支再覆盖相应 Mock 行为。 */
     @BeforeEach
     void setUp() {
         cacheProperties = new ResumeParseCacheProperties();

@@ -15,11 +15,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.ApplicationArguments;
 
+/**
+ * 验证当前进程启动恢复 Runner 按“数据库标记中断任务、Redis 额度结算、数据库凭据清理”顺序处理恢复结果。
+ *
+ * <p>服务均为 Mock；只有 Redis 确认释放的凭据才清理，本类不证明部署为单实例或 Redis 状态跨实例共享。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeTaskRecoveryRunnerTest {
 
+    /** 模拟扫描中断任务并清理已结算额度凭据的数据库恢复服务。 */
     @Mock private ResumeTaskRecoveryService recoveryService;
+    /** 模拟把持久化额度 token 在 Redis 中转换为失败。 */
     @Mock private ResumeAiQuotaService quotaService;
+    /** 满足 ApplicationRunner 回调签名的启动参数 Mock；被测流程不读取其内容。 */
     @Mock private ApplicationArguments arguments;
 
     @Test

@@ -31,18 +31,31 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+/**
+ * 验证简历辅助分析提交服务的参数预检、许可与额度准入、任务登记、事件交接和逆向补偿边界。
+ *
+ * <p>所有协作者均为 Mock；用例重点固定副作用发生顺序以及可选首次分析和必需手工分析在交接失败时的不同结果。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeAiTaskSubmissionServiceTest {
 
+    /** 提供已确认简历事实状态的 Mock，供可选首次分析判断资格。 */
     @Mock private ResumeParseStateService parseStateService;
+    /** 模拟重试预览、任务登记和交接失败后的状态写回。 */
     @Mock private ResumeProfileAnalysisStateService analysisStateService;
+    /** 模拟按用户和简历顺序取得双级 AI 任务许可。 */
     @Mock private ResumeAiTaskAdmissionService admissionService;
+    /** 模拟未进入 Worker 时释放已取得的许可。 */
     @Mock private ResumeAiTaskLeaseRunner leaseRunner;
+    /** 模拟付费模式的每日额度预留和失败释放。 */
     @Mock private ResumeAiQuotaService quotaService;
+    /** 模拟把已登记任务交给事务后监听器的事件发布器。 */
     @Mock private ApplicationEventPublisher eventPublisher;
 
+    /** 使用上述 Mock 构造、供各场景直接调用的被测提交服务。 */
     private ResumeAiTaskSubmissionService service;
 
+    /** 每例重建被测服务，确保协作者引用与 MockitoExtension 当前用例的 Mock 一致。 */
     @BeforeEach
     void setUp() {
         service = new ResumeAiTaskSubmissionService(

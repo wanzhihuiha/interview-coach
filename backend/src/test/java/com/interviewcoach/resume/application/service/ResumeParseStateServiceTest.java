@@ -17,17 +17,26 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * 验证简历事实解析状态服务对任务代次、当前任务认领和结果写回的保护边界。
+ *
+ * <p>当前用例以旧代次结果为代表，确认过期 Worker 不会保存草稿或覆盖简历状态。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeParseStateServiceTest {
 
+    /** 模拟按用户归属加锁读取及保存简历解析状态。 */
     @Mock
     private ResumeRepository resumeRepository;
 
+    /** 模拟把当前代次解析结果保存为待确认事实草稿。 */
     @Mock
     private ResumeProfileSupport profileSupport;
 
+    /** 使用仓储和画像协作者 Mock 构造的被测状态服务。 */
     private ResumeParseStateService stateService;
 
+    /** 每例重建被测状态服务，避免状态或 Mock 交互跨用例保留。 */
     @BeforeEach
     void setUp() {
         stateService = new ResumeParseStateService(resumeRepository, profileSupport);

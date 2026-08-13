@@ -22,7 +22,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 用户模块 Controller 集成测试。
+ * 验证用户 HTTP 接口的请求映射、DTO 序列化、认证身份传递和统一响应包装。
+ *
+ * <p>测试通过真实注册与登录端点取得 JWT，再访问资料和改密端点；Spring 测试事务结束后回滚持久化数据。</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -30,9 +32,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class UserControllerTest {
 
+    /** 在完整 Spring MVC 过滤链上发起请求并读取状态与响应 JSON 的测试客户端。 */
     @Autowired
     private MockMvc mockMvc;
 
+    /** 将请求 DTO 写为 JSON，并从登录响应中提取 JWT 的测试序列化器。 */
     @Autowired
     private ObjectMapper objectMapper;
 

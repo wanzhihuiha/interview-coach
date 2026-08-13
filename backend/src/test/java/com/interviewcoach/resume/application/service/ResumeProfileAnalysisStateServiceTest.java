@@ -31,17 +31,29 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * 验证简历辅助分析状态服务对成功结果与当前任务的分离、模式资格、任务代次及状态写回边界。
+ *
+ * <p>用例通过仓储 Mock 固定锁内数据，覆盖首次、重新生成和继续调整模式，以及事实 hash 变化、旧任务返回和坏 JSON 的处理。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeProfileAnalysisStateServiceTest {
 
+    /** 模拟加锁读取、创建和更新辅助分析单行状态。 */
     @Mock private ResumeProfileAnalysisRepository analysisRepository;
+    /** 模拟读取当前正式事实画像及其 hash。 */
     @Mock private ResumeProfileRepository profileRepository;
+    /** 模拟读取简历归属和事实解析状态，阻止同简历 AI 任务并发。 */
     @Mock private ResumeRepository resumeRepository;
+    /** 模拟把正式画像 JSON 还原为 Worker 输入事实。 */
     @Mock private ResumeProfileSupport profileSupport;
 
+    /** 序列化成功分析结果并解析保留结果的真实测试 JSON 工具。 */
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** 使用仓储、画像支持组件和 JSON 工具构造的被测状态服务。 */
     private ResumeProfileAnalysisStateService stateService;
 
+    /** 每例重建被测服务；固定 JSON 与实体夹具由各场景显式创建。 */
     @BeforeEach
     void setUp() {
         stateService = new ResumeProfileAnalysisStateService(

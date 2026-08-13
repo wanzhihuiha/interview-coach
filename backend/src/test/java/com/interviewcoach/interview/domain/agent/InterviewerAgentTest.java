@@ -16,6 +16,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+/**
+ * 验证受限出题 Agent 使用简历辅助分析时的数据边界。
+ *
+ * <p>当前用例以 Mock 安全模型、Skill 和题库协作者确认推断技能只进入待核验选题线索，且空分析元素会被忽略；题库命中和固定模板降级属于被测组件职责，但本类当前未单独断言。</p>
+ */
 class InterviewerAgentTest {
 
     @Test

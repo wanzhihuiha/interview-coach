@@ -15,6 +15,11 @@ import com.interviewcoach.user.domain.entity.UserRole;
 import com.interviewcoach.user.domain.entity.UserStatus;
 import org.junit.jupiter.api.Test;
 
+/**
+ * 核对跨业务域用户可见枚举的稳定英文编码与中文展示名映射。
+ *
+ * <p>本类同时固定已知编码的中文名称和未知历史值原样回退边界，不验证 Controller 对 API Label 的组装。</p>
+ */
 class DisplayNameMappingTest {
 
     @Test

@@ -8,7 +8,9 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * 模型路由器单元测试。
+ * 验证模型路由器按任务层级解析主备配置、选择厂商默认或覆盖模型，并拒绝未启用厂商。
+ *
+ * <p>测试只构造内存配置，不创建模型客户端或发起网络请求；配置中的 Key 和 URL 都是 fixture。</p>
  */
 class ModelRouterTest {
 

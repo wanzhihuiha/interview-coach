@@ -20,7 +20,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 /**
- * 简历解析事件入队测试。
+ * 验证简历解析事件监听器的许可准入、执行器提交、租约包装和拒绝补偿边界。
+ *
+ * <p>执行器与全部协作者均为 Mock；用例区分监听器自行准入的可选交接和上传流程已携带租约的必需交接。</p>
  */
 class ResumeParseEventListenerTest {
 

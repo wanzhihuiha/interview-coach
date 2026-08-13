@@ -17,6 +17,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+/**
+ * 验证辅助分析事件监听器的许可准入、执行器提交、租约包装和调度失败补偿边界。
+ *
+ * <p>执行器与协作者均为 Mock；用例区分监听器现场取得的许可和提交服务已预先取得、必须成功交接的租约。</p>
+ */
 class ResumeProfileAnalysisEventListenerTest {
 
     @Test

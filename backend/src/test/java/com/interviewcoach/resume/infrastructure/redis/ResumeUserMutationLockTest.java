@@ -16,15 +16,25 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.ObjectProvider;
 
+/**
+ * 验证用户级简历变更锁的默认无等待获取、当前线程释放和严格模式丢锁拒绝边界。
+ *
+ * <p>RedissonClient 与锁均为 Mock；用例只固定 Key 归属及调用结果，不验证多实例是否共享同一 Redis Key 空间。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeUserMutationLockTest {
 
+    /** 模拟延迟获取 RedissonClient 的 Spring Provider。 */
     @Mock private ObjectProvider<RedissonClient> clientProvider;
+    /** 模拟按用户范围 Key 获取锁的 Redisson 客户端。 */
     @Mock private RedissonClient redissonClient;
+    /** 模拟当前用户变更锁的获取、归属检查和释放。 */
     @Mock private RLock lock;
 
+    /** 使用默认锁配置与上述 Mock 构造的被测用户变更锁。 */
     private ResumeUserMutationLock mutationLock;
 
+    /** 每例重建被测对象，并将用户 3 的固定 Key 绑定到锁 Mock。 */
     @BeforeEach
     void setUp() {
         mutationLock = new ResumeUserMutationLock(clientProvider, new ResumeAiTaskProperties());

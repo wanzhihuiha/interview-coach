@@ -8,10 +8,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * JWT 工具类单元测试。
+ * 验证 JWT 的生成、严格校验、声明提取、过期解析和续期宽限边界。
+ *
+ * <p>所有令牌均由测试内存中的 {@link JwtUtil} 生成，本类不经过认证过滤器或 Spring Security 上下文。</p>
  */
 class JwtUtilTest {
 
+    /** 仅用于本类签名与解析样例的测试密钥，不对应任何环境凭据。 */
     private static final String SECRET = "test-secret-key-for-unit-test-only";
 
     @Test

@@ -13,14 +13,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Agent 审计切面单元测试。
+ * 验证 Agent 审计切面对允许、拒绝和失败调用的结果分类与原结果传播边界。
+ *
+ * <p>测试通过反射方法元数据和 Mock JoinPoint 隔离目标调用，并覆盖审计开关关闭场景；异步数据库落库不在本类验证范围内。</p>
  */
 class AgentAuditLogAspectTest {
 
+    /** 为每个场景提供审计与拒绝日志开关的可变测试配置。 */
     private AgentPermissionProperties properties;
+    /** 隔离真实异步持久化的审计存储 Mock。 */
     private AgentAuditLogStorageService storageService;
+    /** 使用测试配置和存储 Mock 构造的被测审计切面。 */
     private AgentAuditLogAspect aspect;
 
+    /** 每例重建配置、存储 Mock 和被测切面，并清空当前线程可能遗留的 Agent 身份。 */
     @BeforeEach
     void setUp() {
         properties = new AgentPermissionProperties();
@@ -32,6 +38,7 @@ class AgentAuditLogAspectTest {
         AgentContextHolder.reset();
     }
 
+    /** 每例结束后清理 ThreadLocal Agent 身份，避免上下文影响后续测试。 */
     @AfterEach
     void tearDown() {
         AgentContextHolder.reset();
@@ -98,7 +105,9 @@ class AgentAuditLogAspectTest {
     }
 
     /**
-     * 测试用的目标类。
+     * 为 JoinPoint Mock 提供可反射的方法元数据。
+     *
+     * <p>这些方法不承载被测业务，实际返回或抛错结果由 {@link ProceedingJoinPoint} Mock 控制。</p>
      */
     @SuppressWarnings("unused")
     public static class Tool {

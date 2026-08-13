@@ -4,6 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * 验证简历文本脱敏器当前识别的姓名、电话、邮箱、身份证、生日和地址替换，以及学校和公司信息保留边界。
+ *
+ * <p>用例固定当前规则可识别的样例和 maskedTypes 结果，不证明所有格式都能被识别；正则覆盖与漏检风险仍由主实现说明。</p>
+ */
 class ResumeDesensitizerTest {
 
     @Test

@@ -22,16 +22,27 @@ import org.redisson.api.RPermitExpirableSemaphore;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.ObjectProvider;
 
+/**
+ * 验证 AI 任务按用户许可再简历许可的顺序准入、第二级失败回滚、续期和逆序释放边界。
+ *
+ * <p>Redisson 与两个信号量均为 Mock；两级许可是顺序获取并在失败时补偿，不被本类视为一个原子操作。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeAiTaskAdmissionServiceTest {
 
+    /** 模拟延迟获取 RedissonClient 的 Spring Provider。 */
     @Mock private ObjectProvider<RedissonClient> clientProvider;
+    /** 模拟按 Key 查找可过期许可信号量的 Redisson 客户端。 */
     @Mock private RedissonClient redissonClient;
+    /** 模拟限制同一用户并发 AI 任务数的第一级信号量。 */
     @Mock private RPermitExpirableSemaphore userSemaphore;
+    /** 模拟限制同一用户同一简历并发 AI 任务数的第二级信号量。 */
     @Mock private RPermitExpirableSemaphore resumeSemaphore;
 
+    /** 使用零等待、五分钟租期配置和 Redisson Mock 构造的被测准入服务。 */
     private ResumeAiTaskAdmissionService service;
 
+    /** 每例重建服务，并把用户级和简历级 Key 分别绑定到对应信号量 Mock。 */
     @BeforeEach
     void setUp() {
         ResumeAiTaskProperties properties = new ResumeAiTaskProperties();

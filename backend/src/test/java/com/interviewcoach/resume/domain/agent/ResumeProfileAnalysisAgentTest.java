@@ -14,6 +14,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+/**
+ * 验证简历辅助分析 Agent 的模式化 Prompt、事实与旧结果脱敏、用户反馈边界、模型调用前计次及输出归一化。
+ *
+ * <p>模型由内存桩替代；INITIAL/REGENERATE/REFINE 的输入选择由真实 Agent 实现完成，本类不验证外部供应商传输。</p>
+ */
 class ResumeProfileAnalysisAgentTest {
 
     @Test

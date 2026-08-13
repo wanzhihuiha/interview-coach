@@ -9,6 +9,11 @@ import org.redisson.config.SingleServerConfig;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.test.util.ReflectionTestUtils;
 
+/**
+ * 验证 Spring Redis 属性到简历模块 Redisson 单节点配置的地址、库、认证标识和超时映射。
+ *
+ * <p>测试只检查内存中的 {@link Config}，不会连接 Redis；单节点分支是当前配置类行为，不代表生产部署拓扑。</p>
+ */
 class ResumeRedissonConfigurationTest {
 
     @Test

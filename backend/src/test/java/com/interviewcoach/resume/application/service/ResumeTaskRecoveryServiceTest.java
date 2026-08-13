@@ -22,12 +22,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * 验证当前进程启动恢复服务对中断解析与辅助分析任务的终态写回及额度凭据清理边界。
+ *
+ * <p>仓储均为 Mock；本类不验证部署是否单实例，只固定扫描结果、批量失败数量以及仅清除匹配任务凭据的行为。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeTaskRecoveryServiceTest {
 
+    /** 模拟扫描中断的事实解析任务、批量标记失败及清理其额度元数据。 */
     @Mock
     private ResumeRepository resumeRepository;
 
+    /** 模拟扫描中断的辅助分析任务、批量标记失败及清理其额度元数据。 */
     @Mock
     private ResumeProfileAnalysisRepository analysisRepository;
 

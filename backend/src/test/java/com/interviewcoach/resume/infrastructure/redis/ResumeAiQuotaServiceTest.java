@@ -21,13 +21,21 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * 验证用户每日 AI 尝试与成功额度服务的固定业务日期、Lua 返回码和 token 状态转换边界。
+ *
+ * <p>Redis 脚本执行器为 Mock；默认上限来自测试配置对象，当前用例不把具体默认值视为不可配置业务规则。</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ResumeAiQuotaServiceTest {
 
+    /** 模拟单 Key Lua 执行及其状态码返回，不连接真实 Redis。 */
     @Mock private ResumeRedisScriptExecutor scriptExecutor;
 
+    /** 使用脚本 Mock、默认配置和固定时钟构造的被测额度服务。 */
     private ResumeAiQuotaService service;
 
+    /** 每例固定上海时区准入时刻，确保额度日期和 Redis Key 可重复断言。 */
     @BeforeEach
     void setUp() {
         ResumeAiTaskProperties properties = new ResumeAiTaskProperties();
