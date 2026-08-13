@@ -24,24 +24,36 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 协调者 Agent：负责初始化上下文、识别当前环节意图、调度对应 Skill。
- * 各环节的提问策略、评估策略、切换策略由具体 Skill 实现。
+ * 面试轮次的服务端协调者。
+ *
+ * <p>应用服务用创建快照初始化上下文后，由本组件解析当前环节并调度对应 Skill。评估模型
+ * 只返回经过校验的分数和评价；质量信号、计数器、主题/环节切换及结束动作均由 Skill 与
+ * 本协调者确定，最终结果交回应用层短事务保存。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class CoordinatorAgent {
 
+    /** 负责通过安全 LLM 入口评估当前问答；失败时返回空结果。 */
     private final EvaluatorAgent evaluatorAgent;
+
+    /** 负责按当前面试环节解析唯一 Skill 实现。 */
     private final SkillRegistry skillRegistry;
+
+    /** 负责把会话中保存的环节 JSON 快照还原为服务端枚举列表。 */
     private final ObjectMapper objectMapper;
 
     /**
-     * 从面试快照初始化运行上下文；辅助分析随上下文传递，但不进入评估器和评分流程。
+     * 从面试实体和画像快照初始化运行上下文。
+     *
+     * <p>辅助分析只随上下文供出题器选择核验线索，不传入评估器或报告评分公式。最大问题数
+     * 30 和单主题追问上限 5 是当前固定预算，精确产品或容量依据缺失。</p>
      */
     public InterviewContext initialize(Interview interview, UserProfileData userProfile,
                                        ResumeProfileAnalysisData userProfileAnalysis,
                                        PositionProfileData positionProfile) {
+        // 在 COORDINATOR 权限上下文中组装服务端状态，供后续受限 Agent 调用链使用。
         return AgentContext.runAs(AgentType.COORDINATOR, () -> {
             InterviewContext context = new InterviewContext();
             context.setInterviewId(interview.getId());
@@ -69,23 +81,26 @@ public class CoordinatorAgent {
         });
     }
 
-    /**
-     * 生成首题。根据当前环节加载对应 Skill。
-     */
+    /** 按当前环节解析 Skill 并生成首题；出题器内部负责题库、模型和固定模板降级。 */
     public String generateFirstQuestion(InterviewContext context) {
         return AgentContext.runAs(AgentType.COORDINATOR, () -> {
+            // Skill 注册表是环节到策略的服务端边界，解析失败直接阻断初始化。
             InterviewSkill skill = skillRegistry.resolve(context.getCurrentPhase());
             return skill.generateOpeningQuestion(context);
         });
     }
 
     /**
-     * 在事务外处理用户回答并生成下一题；消息和面试状态由应用层短事务统一写回。
-     * 模型只提供经过校验的分数和评价，质量事件、计数器和下一步动作全部由服务端计算。
+     * 在事务外处理用户回答并生成下一题。
+     *
+     * <p>本方法只构造尚未持久化的候选人消息用于 Skill 判断；应用层随后在 reservation 仍匹配
+     * 时统一保存回答、下一题和上下文。模型只提供校验后的分数与评价，质量事件、计数器和
+     * 下一步动作全部由服务端计算。评估不可用时使用中性信号，不猜分也不更新质量计数。</p>
      */
     public TurnResult coordinate(InterviewContext context, Interview interview,
                                  String questionText, String answerText) {
         return AgentContext.runAs(AgentType.COORDINATOR, () -> {
+            // 预构造本轮候选人消息，供 needEvaluate 判断和记录本轮评估序号；此处不写数据库。
             int answerSeqNo = interview.getTotalQuestionCount() + 1;
             InterviewMessage answer = new InterviewMessage();
             answer.setInterviewId(interview.getId());
@@ -97,10 +112,12 @@ public class CoordinatorAgent {
             answer.setDepth(context.getCurrentDepth());
             answer.setSeqNo(answerSeqNo);
 
+            // 当前环节 Skill 负责评估频率、信号派生、计数更新和确定性动作选择。
             InterviewSkill currentSkill = skillRegistry.resolve(context.getCurrentPhase());
 
             EvaluationSignal signal;
             if (currentSkill.needEvaluate(context, answer)) {
+                // 安全评估失败返回 null；失败不会把模型原文或伪造分数带入流程控制。
                 EvaluationResult evalResult = evaluatorAgent.evaluate(context, questionText, answerText);
                 if (evalResult == null) {
                     // 评估不可用时不猜分、不改变质量计数，只让服务端原有数量规则继续推进。
@@ -117,6 +134,7 @@ public class CoordinatorAgent {
             }
 
             // 下一步动作只读取服务端上下文和服务端派生信号，不接受模型返回 phase 或 nextAction。
+            // 下一步动作只读取服务端上下文和服务端派生信号，不接受模型返回流程字段。
             NextAction action = currentSkill.decideNextAction(context, signal);
             log.info("[CoordinatorAgent] interviewId={}, action={}, phase={}",
                     interview.getId(), action, context.getCurrentPhase());
@@ -125,9 +143,11 @@ public class CoordinatorAgent {
             InterviewPhase previousPhase = null;
 
             switch (action) {
+                // 同一主题继续追问，Skill 会更新自身计数并调用面试官生成对应题型。
                 case FOLLOW_UP -> nextQuestion = currentSkill.generateNextQuestion(
                         context, questionText, answerText, signal);
                 case SWITCH_TOPIC -> {
+                    // 先尝试在当前环节换主题；无更多主题时才推进到用户选择的下一环节。
                     if (currentSkill.switchToNextTopic(context)) {
                         nextQuestion = currentSkill.generateTransitionQuestion(context);
                     } else {
@@ -138,12 +158,14 @@ public class CoordinatorAgent {
                     }
                 }
                 case NEXT_PHASE -> {
+                    // Skill 明确要求切环节时记录旧环节，以便持久化层重置新环节题目计数。
                     previousPhase = context.getCurrentPhase();
                     advancePhase(context);
                     InterviewSkill nextSkill = skillRegistry.resolve(context.getCurrentPhase());
                     nextQuestion = nextSkill.generateOpeningQuestion(context);
                 }
                 case END_INTERVIEW -> {
+                    // 结束动作统一进入 ENDING Skill，生成结束语后由应用层把会话置为正常结束。
                     previousPhase = context.getCurrentPhase();
                     context.setCurrentPhase(InterviewPhase.ENDING);
                     InterviewSkill endingSkill = skillRegistry.resolve(InterviewPhase.ENDING);
@@ -152,6 +174,7 @@ public class CoordinatorAgent {
                 default -> throw new IllegalStateException("未知决策: " + action);
             }
 
+            // 返回下一题和推进后的状态快照，应用层验证 reservation 后再原子落库。
             TurnResult result = new TurnResult();
             result.setQuestion(nextQuestion);
             result.setPhase(context.getCurrentPhase());
@@ -165,7 +188,8 @@ public class CoordinatorAgent {
     }
 
     /**
-     * 结束面试。
+     * 在内存实体上设置面试终态和结束时间。
+     * {@code interrupted=true} 用于用户主动结束，{@code false} 表示正常结束；持久化由调用方负责。
      */
     public void endInterview(Interview interview, boolean interrupted) {
         AgentContext.runAs(AgentType.COORDINATOR, () -> {
@@ -174,7 +198,9 @@ public class CoordinatorAgent {
         });
     }
 
-    /** 切换到服务端选择的下一环节，并在进入新环节时重置该环节的题目计数。 */
+    /**
+     * 切换到已选列表中的下一环节，并在找到下一环节时重置环节题目计数；列表耗尽则进入结束环节。
+     */
     private void advancePhase(InterviewContext context) {
         InterviewPhase next = context.nextPhase();
         if (next == null) {
@@ -186,7 +212,8 @@ public class CoordinatorAgent {
     }
 
     /**
-     * 创建不含评分和流程建议的中性信号，供“不需要评估”和“评估不可用”两种情况继续执行数量规则。
+     * 创建不含评分和流程建议的中性信号。
+     * {@code continueProbing=true} 只供现有 Skill 继续执行数量规则，不代表模型确认应继续追问。
      */
     private EvaluationSignal neutralSignal() {
         EvaluationSignal signal = new EvaluationSignal();
@@ -195,7 +222,8 @@ public class CoordinatorAgent {
     }
 
     /**
-     * 解析面试快照中的环节列表；快照为空时返回空列表，内容损坏时回退到既有默认环节顺序。
+     * 解析并按固定 order 排序面试环节快照。
+     * 空快照返回空列表；坏 JSON 或未知枚举值会记录告警并回退到固定五环节顺序。
      */
     private List<InterviewPhase> parsePhases(String phasesJson) {
         if (phasesJson == null || phasesJson.isBlank()) {
@@ -215,7 +243,7 @@ public class CoordinatorAgent {
         }
     }
 
-    /** 协调完成一轮后交给应用层保存的服务端结果快照。 */
+    /** 协调完成一轮后交给应用层短事务保存的服务端结果快照。 */
     @lombok.Data
     public static class TurnResult {
 

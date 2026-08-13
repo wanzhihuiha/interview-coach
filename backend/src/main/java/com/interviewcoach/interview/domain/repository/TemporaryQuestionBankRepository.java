@@ -6,23 +6,23 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 /**
- * 临时题库数据访问接口。
+ * 临时题目的 Spring Data JPA 仓储，供 Evaluator 附带保存、题库去重和管理端审核使用。
  */
 @Repository
 public interface TemporaryQuestionBankRepository extends JpaRepository<TemporaryQuestionBank, Long> {
 
     /**
-     * 按岗位类别和环节查询待审核题目。
+     * 按岗位类别、环节和调用方给出的字符串状态精确查询候选题；是否为 PENDING 由调用方决定。
      */
     List<TemporaryQuestionBank> findByJobCategoryAndPhaseAndStatus(String jobCategory, String phase, String status);
 
     /**
-     * 按内容精确匹配查询。
+     * 按正文精确匹配查询，供题库工具跨临时/永久集合检查重复；无匹配返回空列表。
      */
     List<TemporaryQuestionBank> findByContent(String content);
 
     /**
-     * 按审核状态统计题目数量。
+     * 按调用方给出的字符串审核状态统计题目数量，不校验状态是否属于既有三值。
      */
     long countByStatus(String status);
 }

@@ -19,17 +19,25 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * 面试回答评估任务定义：固定服务端评估要求，并严格校验模型只能返回评分和简短评价。
+ * 安全 LLM 网关使用的面试回答评估任务定义。
+ *
+ * <p>它只把服务端环节和深度写入可信提示词，把外部问答留在 DATA_ONLY 数据块，并将模型
+ * 响应严格收口为五项整数分数、整体等级和简短评价。解析后的文本还会重新包装为模型派生
+ * 数据，交给网关做输出风险复检，成功结果最终供 Evaluator 与 Skill 派生流程信号。</p>
  */
 @Component
 @RequiredArgsConstructor
 public class InterviewAnswerEvaluationTaskDefinition
         implements LlmTaskDefinition<InterviewAnswerEvaluationTaskDefinition.Parameters, EvaluationResult> {
 
-    /** 限制模型原始响应大小，避免把异常长文本交给 JSON 解析器继续处理。 */
+    /**
+     * 模型原始响应的当前固定 UTF-16 长度上限；用于在 JSON 解析前拒绝异常长文本，8000 的精确依据缺失。
+     */
     private static final int MAX_RAW_RESPONSE_LENGTH = 8_000;
 
-    /** 限制最终可进入业务对象的评价长度。 */
+    /**
+     * 最终评价的当前固定 Unicode 字符上限；调大将扩大后续日志/数据处理面，300 的精确依据缺失。
+     */
     private static final int MAX_COMMENT_CHARACTERS = 300;
 
     /** 模型响应必须完整包含且只能包含这些字段。 */
@@ -56,18 +64,22 @@ public class InterviewAnswerEvaluationTaskDefinition
             "shouldSwitchTopic",
             "shouldEnd");
 
+    /** 负责启用重复字段检测并逐字段读取唯一 JSON 对象。 */
     private final ObjectMapper objectMapper;
 
+    /** 返回注册表匹配该定义时使用的固定任务类型。 */
     @Override
     public LlmTaskType taskType() {
         return LlmTaskType.INTERVIEW_ANSWER_EVALUATION;
     }
 
+    /** 声明安全网关反序列化可信参数时要求的记录类型。 */
     @Override
     public Class<Parameters> parametersType() {
         return Parameters.class;
     }
 
+    /** 声明安全网关和调用方共同期望的响应业务类型。 */
     @Override
     public Class<EvaluationResult> responseType() {
         return EvaluationResult.class;
@@ -169,6 +181,7 @@ public class InterviewAnswerEvaluationTaskDefinition
             return LlmExecutionResult.failure(LlmFailureType.INVALID_RESPONSE_CONTENT);
         }
 
+        // 只有完整字段全部通过验证后才构造业务结果，避免部分评分进入流程决策。
         EvaluationResult result = new EvaluationResult();
         result.setOverall(overall);
         result.setTechnicalDepth(technicalDepth);
@@ -213,6 +226,7 @@ public class InterviewAnswerEvaluationTaskDefinition
      */
     public record Parameters(InterviewPhase phase, Integer questionDepth) {
 
+        /** 复核可信服务端参数，防止无环节或越界深度进入 system prompt。 */
         public Parameters {
             // 在构造入口收紧服务端参数，避免无效状态被拼进可信提示词。
             Objects.requireNonNull(phase, "回答评估缺少面试环节");

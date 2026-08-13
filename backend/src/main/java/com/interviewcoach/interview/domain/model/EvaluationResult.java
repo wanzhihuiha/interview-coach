@@ -3,7 +3,10 @@ package com.interviewcoach.interview.domain.model;
 import lombok.Data;
 
 /**
- * 已通过任务契约校验的回答评估结果，只承载分数和简短评价，不承载面试流程决策。
+ * 已通过安全回答评估任务契约的评分数据。
+ *
+ * <p>由 {@code InterviewAnswerEvaluationTaskDefinition} 从模型响应创建，Evaluator 交给当前
+ * Skill 派生流程信号；它不由模型直接控制，也不持久化为当前报告的评分来源。</p>
  */
 @Data
 public class EvaluationResult {

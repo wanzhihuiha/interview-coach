@@ -19,15 +19,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 评估者 Agent：把单轮问题和回答作为无指令权限的数据提交到安全入口，只返回已校验的评分结果。
- * 下一题深度、主题切换和结束状态不由本 Agent 决定。
+ * 单轮回答的受限评估 Agent。
+ *
+ * <p>Coordinator 把当前问题和候选人回答交给本组件；本组件将所有外部文本包装为无指令权限
+ * 数据块，通过类型化安全入口取得严格校验的评分对象。下一题深度、主题切换和结束状态不由
+ * 本 Agent 决定；完成一次安全执行后还会尽力把问题写入临时题库供人工审核。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class EvaluatorAgent {
 
+    /** 负责 Agent 权限、Redis 限流、安全检测、模型传输和结构化响应校验。 */
     private final LlmInterviewService llmService;
+
+    /** 负责把本轮问题附带保存到临时题库；该写入失败与评估结果隔离。 */
     private final QuestionBankTool questionBankTool;
 
     /**
@@ -46,6 +52,7 @@ public class EvaluatorAgent {
                 LlmTaskInput<InterviewAnswerEvaluationTaskDefinition.Parameters> input =
                         new LlmTaskInput<>(
                                 LlmTaskType.INTERVIEW_ANSWER_EVALUATION, parameters, dataBlocks);
+                // 安全入口完成输入检测、模型调用、严格解析和输出复检，失败只返回分类对象。
                 LlmExecutionResult<EvaluationResult> executionResult =
                         llmService.execute(input, EvaluationResult.class);
                 // 安全入口返回后，沿用原流程把本轮问题保存到临时题库，供后续人工审核是否入库。
@@ -68,6 +75,9 @@ public class EvaluatorAgent {
 
     /**
      * 组装无指令权限的数据块。来源枚举用于标记文本来自哪里，但不会提升文本的可信等级。
+     */
+    /**
+     * 组装评估输入数据块；岗位标题、主题、问题和回答都不具备指令权限。
      */
     private List<LlmDataBlock> buildDataBlocks(
             InterviewContext context, String question, String answer) {
@@ -92,6 +102,7 @@ public class EvaluatorAgent {
         return dataBlocks;
     }
 
+    /** 仅在可选文本非空时加入数据块，避免空标题或主题破坏任务输入。 */
     private void addOptionalDataBlock(
             List<LlmDataBlock> dataBlocks,
             String blockId,
@@ -119,6 +130,7 @@ public class EvaluatorAgent {
             item.setExpectedAnswer(null);
             item.setId(context.getInterviewId());
             item.setDifficultyLevel(context.getCurrentDepth() != null ? context.getCurrentDepth() : 3);
+            // 题库工具负责正文去重与临时实体保存；异常被本方法捕获，不改变已取得的评估结果。
             questionBankTool.saveTemporaryQuestion(item);
         } catch (Exception e) {
             log.warn("[EvaluatorAgent] 写入临时 RAG 失败，不影响评估流程: {}", e.getMessage());

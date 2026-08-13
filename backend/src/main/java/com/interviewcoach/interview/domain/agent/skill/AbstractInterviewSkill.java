@@ -8,28 +8,36 @@ import com.interviewcoach.interview.domain.model.NextAction;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Skill 抽象基类，负责把已校验分数转换成服务端评估事件，并维护连续优秀或困难计数。
- * 模型不能直接提供事件、下一题深度或流程动作。
+ * 各面试环节 Skill 的公共服务端规则基类。
+ *
+ * <p>具体 Skill 由 Coordinator 调度；本类持有 Interviewer 用于出题，并把已校验的五项分数
+ * 转为固定质量事件、维护连续优秀/困难计数及提供默认环节结束判断。模型不能直接提供事件、
+ * 下一题深度或流程动作。</p>
  */
 public abstract class AbstractInterviewSkill implements InterviewSkill {
 
+    /** 具体 Skill 生成首题、追问或过渡题时调用的面试官 Agent。 */
     @Autowired
     protected com.interviewcoach.interview.domain.agent.InterviewerAgent interviewerAgent;
 
+    /** 当前 Skill 唯一支持的服务端面试环节。 */
     private final InterviewPhase supportedPhase;
 
+    /** 绑定实现与唯一环节，供注册表扫描。 */
     protected AbstractInterviewSkill(InterviewPhase supportedPhase) {
         this.supportedPhase = supportedPhase;
     }
 
     @Override
+    /** 仅在输入环节与构造时绑定值相同时返回支持。 */
     public boolean supports(InterviewPhase phase) {
         return supportedPhase == phase;
     }
 
     /**
-     * 根据五项分数的平均值生成固定事件：85 分及以上为优秀，低于 55 分为困难，其余为中性。
+     * 根据五项分数的整数平均值生成固定事件：85 分及以上为优秀，低于 55 分为困难，其余为中性。
      * {@code result} 为空时返回继续追问的中性信号，不从缺失结果中猜测分数。
+     * 85 和 55 的精确业务依据当前缺失，调整会改变深度与主题推进。
      */
     @Override
     public EvaluationSignal extractSignal(EvaluationResult result) {
@@ -70,7 +78,7 @@ public abstract class AbstractInterviewSkill implements InterviewSkill {
     }
 
     /**
-     * 默认结束策略：当前为最后一环节则结束面试，否则进入下一环节。
+     * 默认结束策略：当前为已选列表最后一环节或已经在 ENDING 时结束，否则进入下一环节。
      */
     protected NextAction nextPhaseOrEnd(InterviewContext context) {
         if (context.isLastPhase() || context.getCurrentPhase() == InterviewPhase.ENDING) {
@@ -80,7 +88,8 @@ public abstract class AbstractInterviewSkill implements InterviewSkill {
     }
 
     /**
-     * 只对非空分数求整数平均值。正常安全评估包含全部五项；若其他调用方传入全空结果，沿用默认 70 分。
+     * 只对非空分数求整数平均值。正常安全评估包含全部五项；若其他调用方传入全空结果，
+     * 沿用当前固定 70 分中性默认值，其精确依据缺失。
      */
     protected int average(EvaluationResult r) {
         int sum = 0;

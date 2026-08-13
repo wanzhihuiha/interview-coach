@@ -3,13 +3,20 @@ package com.interviewcoach.interview.domain.agent;
 import java.util.Objects;
 
 /**
- * 模型出题不可用时使用的固定安全文本；模板不拼接任何外部内容或模型原文。
+ * 模型出题、输入构造或 Skill 加载不可用时使用的固定问题模板。
+ *
+ * <p>Interviewer 仅按服务端题型选择这里的常量文本；模板不拼接岗位、简历、回答、模型原文
+ * 或其他外部内容，因此降级结果不会把不可信文本重新作为问题输出。</p>
  */
 public final class SafeInterviewQuestionTemplates {
 
+    /** 工具类型不允许实例化。 */
     private SafeInterviewQuestionTemplates() {
     }
 
+    /**
+     * 按非空服务端题型返回对应固定问题或结束语；本方法不改变环节、主题或深度状态。
+     */
     public static String forKind(InterviewQuestionKind kind) {
         Objects.requireNonNull(kind, "面试题类型不能为空");
         return switch (kind) {

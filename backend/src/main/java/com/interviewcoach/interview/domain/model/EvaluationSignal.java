@@ -3,7 +3,10 @@ package com.interviewcoach.interview.domain.model;
 import lombok.Data;
 
 /**
- * 精简评估信号，传递给面试官 Agent 做决策参考。
+ * 由服务端 Skill 从合法评估结果或固定环节规则派生的精简流程信号。
+ *
+ * <p>Coordinator 将它交给当前 Skill 决策；模型不能直接设置这些字段，空评估时使用不含质量
+ * 事件的中性值。信号只影响当前面试流程，不替代报告持久化评分。</p>
  */
 @Data
 public class EvaluationSignal {

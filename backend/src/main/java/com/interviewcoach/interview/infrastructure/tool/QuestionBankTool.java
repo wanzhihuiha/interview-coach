@@ -15,12 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 题库工具：支持临时 RAG 与永久 RAG 的分层管理。
+ * Agent 访问临时题库和永久题库的受限工具。
  *
  * <p>权限边界：
  * <ul>
- *   <li>临时 RAG：仅评估 Agent 可读写。</li>
- *   <li>永久 RAG：面试官、评估、协调、报告等 Agent 可读。</li>
+ *   <li>临时题库：评估 Agent 可通过本工具附带写入和执行去重查询。</li>
+ *   <li>永久题库：面试官、评估、协调、报告 Agent 可读取。</li>
  *   <li>临时题提升为永久题：由管理员审核后通过应用服务完成，不开放给 Agent。</li>
  * </ul>
  */
@@ -29,14 +29,20 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class QuestionBankTool {
 
+    /** 负责临时题保存、精确正文查询和待审核候选题读取。 */
     private final TemporaryQuestionBankRepository temporaryRepository;
+    /** 负责永久题精确正文查询及按使用次数升序读取候选题。 */
     private final PermanentQuestionBankRepository permanentRepository;
+    /** 负责同岗位类别和环节候选题之间的字符相似判重。 */
     private final QuestionSimilarityChecker similarityChecker;
 
     /**
-     * 将生成的新题存入临时 RAG，存入前会先与临时和永久题库去重。
+     * 将本轮实际问题存入临时题库，存入前先跨临时和永久题库去重。
      *
-     * @param item 题目信息
+     * <p>DTO 的 {@code id} 在此入口临时承载来源面试 ID；空内容或重复题返回空。难度为空时
+     * 写入当前固定默认 3，其精确依据缺失。</p>
+     *
+     * @param item Evaluator 组装的题目信息
      * @return 保存后的题目 ID；如已存在重复题则返回空
      */
     @AgentPermission(AgentType.EVALUATOR)
@@ -46,6 +52,7 @@ public class QuestionBankTool {
             return Optional.empty();
         }
 
+        // 折叠空白后执行跨两类题库的精确和相似度检查，重复时不产生数据库写入。
         String normalized = normalizeContent(item.getContent());
         if (existsDuplicate(normalized, item.getJobCategory(), item.getPhase())) {
             log.info("[QuestionBankTool] 题目已存在，跳过保存: jobCategory={}, phase={}",
@@ -53,6 +60,7 @@ public class QuestionBankTool {
             return Optional.empty();
         }
 
+        // 将 DTO 映射为待审核实体；来源面试 ID 来自复用 DTO 的 id 字段。
         TemporaryQuestionBank entity = new TemporaryQuestionBank();
         entity.setJobCategory(item.getJobCategory());
         entity.setPhase(item.getPhase());
@@ -64,6 +72,7 @@ public class QuestionBankTool {
         entity.setStatus("PENDING");
         entity.setDifficultyLevel(item.getDifficultyLevel() != null ? item.getDifficultyLevel() : 3);
 
+        // 保存参加调用方当前事务；数据库异常向 Evaluator 传播并由其隔离为题库附带写入失败。
         temporaryRepository.save(entity);
         log.info("[QuestionBankTool] 新题已存入临时 RAG: id={}, jobCategory={}, phase={}",
                 entity.getId(), entity.getJobCategory(), entity.getPhase());
@@ -71,7 +80,10 @@ public class QuestionBankTool {
     }
 
     /**
-     * 检查指定题目在临时 RAG 和永久 RAG 中是否已存在（基于文本相似度）。
+     * 检查指定题目是否已存在。
+     *
+     * <p>先用折叠空白后的正文对两表做全局精确查询，再只在相同岗位类别和环节内比较待审核
+     * 临时题与全部永久题的字符相似度。空内容返回 false。</p>
      */
     @AgentPermission(AgentType.EVALUATOR)
     public boolean existsDuplicate(String content, String jobCategory, String phase) {
@@ -80,14 +92,14 @@ public class QuestionBankTool {
         }
         String normalized = normalizeContent(content);
 
-        // 1. 精确匹配
+        // 精确查询不带岗位或环节条件，因此跨分层相同正文也会判重。
         boolean exactInTemporary = !temporaryRepository.findByContent(normalized).isEmpty();
         boolean exactInPermanent = !permanentRepository.findByContent(normalized).isEmpty();
         if (exactInTemporary || exactInPermanent) {
             return true;
         }
 
-        // 2. 相似度匹配：检查同一岗位类别+环节下的题目
+        // 相似度阶段只读取相同岗位类别、环节且状态为 PENDING 的临时题。
         List<TemporaryQuestionBank> temporaryCandidates = temporaryRepository
                 .findByJobCategoryAndPhaseAndStatus(jobCategory, phase, "PENDING");
         for (TemporaryQuestionBank candidate : temporaryCandidates) {
@@ -96,6 +108,7 @@ public class QuestionBankTool {
             }
         }
 
+        // 永久题按 usageCount 升序读取全部匹配项，但遍历判重不依赖该顺序。
         List<PermanentQuestionBank> permanentCandidates = permanentRepository
                 .findByJobCategoryAndPhaseOrderByUsageCountAsc(jobCategory, phase);
         for (PermanentQuestionBank candidate : permanentCandidates) {
@@ -108,10 +121,12 @@ public class QuestionBankTool {
     }
 
     /**
-     * 从永久 RAG 中按岗位类别和环节采样题目。
+     * 按岗位类别和环节读取永久题，并在内存中截取前 {@code limit} 条。
+     * 仓储按 {@code usageCount} 升序；本方法不随机、不累加使用次数，负 limit 会由 Stream 拒绝。
      */
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.COORDINATOR, AgentType.REPORT})
     public List<QuestionBankItem> sampleFromPermanent(String jobCategory, String phase, int limit) {
+        // 数据库返回完整升序集合，limit 只在 JVM 内存流上应用。
         List<PermanentQuestionBank> entities = permanentRepository
                 .findByJobCategoryAndPhaseOrderByUsageCountAsc(jobCategory, phase);
         return entities.stream()
@@ -121,7 +136,8 @@ public class QuestionBankTool {
     }
 
     /**
-     * 从永久 RAG 中按岗位类别、环节、主题采样题目。
+     * 按岗位类别、环节和主题读取永久题，并在内存中截取使用次数最少的前 {@code limit} 条。
+     * 本方法同样不随机也不写回使用次数。
      */
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.COORDINATOR, AgentType.REPORT})
     public List<QuestionBankItem> sampleFromPermanent(String jobCategory, String phase, String topicId, int limit) {
@@ -134,7 +150,8 @@ public class QuestionBankTool {
     }
 
     /**
-     * 按岗位大类 + 主题统计永久题库题目数。
+     * 统计指定岗位类别下专业环节永久题数；主题为空统计整个专业环节，否则精确筛选主题。
+     * 当前实现通过加载实体列表后取 size，不执行数据库 count 查询。
      */
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.COORDINATOR, AgentType.REPORT})
     public long countByJobCategoryAndTopic(String jobCategory, String topicId) {
@@ -147,7 +164,10 @@ public class QuestionBankTool {
     }
 
     /**
-     * 决定本次出题来源中永久题库所占比例。MVP 阶段永久题库较少时返回 0.0，后续可按题目数量动态调整。
+     * 按永久题数量返回分段比例值。
+     *
+     * <p>当前 Interviewer 只判断返回值是否大于 0，把它当作题库启用开关，并未按 0.2～0.95
+     * 概率选择来源。10/100/200/400/1000 和各比例的精确依据缺失。</p>
      */
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.COORDINATOR, AgentType.REPORT})
     public double decideBankRatio(String jobCategory, String topicId) {
@@ -170,6 +190,7 @@ public class QuestionBankTool {
         return 0.95;
     }
 
+    /** 将永久实体映射为 Agent DTO；难度为空时按当前固定默认 3 返回。 */
     private QuestionBankItem toItem(PermanentQuestionBank entity) {
         QuestionBankItem item = new QuestionBankItem();
         item.setId(entity.getId());
@@ -184,6 +205,7 @@ public class QuestionBankTool {
         return item;
     }
 
+    /** 去除正文两端空白并把连续空白折叠成一个空格，供精确查询和相似度入口使用。 */
     private String normalizeContent(String content) {
         return content.trim().replaceAll("\\s+", " ");
     }
