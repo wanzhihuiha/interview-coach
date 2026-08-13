@@ -12,23 +12,29 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  */
 public final class HttpRequestDiagnostics {
 
+    /**
+     * 保存请求内可变聚合器的 Servlet 属性键；值仅属于当前 {@link HttpServletRequest}。
+     */
     private static final String ATTRIBUTE = HttpRequestDiagnostics.class.getName() + ".data";
 
     private HttpRequestDiagnostics() {
     }
 
+    /** 将 MVC 已解析的处理器标识写入当前请求聚合器；无请求时由调用方跳过。 */
     static void setHandler(HttpServletRequest request, String handler) {
         if (request != null) {
             data(request).setHandler(handler);
         }
     }
 
+    /** 将认证后的用户标识写入当前请求聚合器。 */
     static void setUserId(HttpServletRequest request, String userId) {
         if (request != null) {
             data(request).setUserId(userId);
         }
     }
 
+    /** 将统一响应体中的业务码写入当前请求聚合器。 */
     static void setBusinessCode(HttpServletRequest request, int businessCode) {
         if (request != null) {
             data(request).setBusinessCode(businessCode);
@@ -87,12 +93,19 @@ public final class HttpRequestDiagnostics {
      */
     private static final class Data {
 
+        /** MVC 实际处理请求的 {@code ControllerSimpleName.methodName}，尚未解析时为 {@code null}。 */
         private String handler;
+        /** Controller 切面识别出的数字用户 ID；匿名或非数字 Principal 使用 {@code anonymous}。 */
         private String userId;
+        /** 统一响应体的业务码；尚未生成 {@code ApiResponse} 时为 {@code null}。 */
         private Integer businessCode;
+        /** 当前请求已完成的 Spring Data Repository 调用次数。 */
         private int repositoryCalls;
+        /** 当前请求所有 Repository 调用耗时之和，单位为纳秒。 */
         private long repositoryDurationNanos;
+        /** 当前请求中耗时最长的 Repository 方法标识；尚无调用时为 {@code null}。 */
         private String slowestRepository;
+        /** 当前最慢 Repository 调用耗时，单位为纳秒。 */
         private long slowestRepositoryDurationNanos;
 
         synchronized void setHandler(String handler) {
@@ -132,6 +145,17 @@ public final class HttpRequestDiagnostics {
         }
     }
 
+    /**
+     * 请求结束时交给 {@link HttpTimingFilter} 的不可变诊断快照。
+     *
+     * @param handler MVC 处理器标识，未解析时为 {@code null}
+     * @param userId 已认证数字用户 ID 或 {@code anonymous}，未经过 Controller 时可为 {@code null}
+     * @param businessCode 响应体业务码，未生成统一响应时为 {@code null}
+     * @param repositoryCalls Repository 调用总次数
+     * @param repositoryDurationMs Repository 调用累计耗时，单位为毫秒
+     * @param slowestRepository 最慢 Repository 方法标识，无调用时为 {@code null}
+     * @param slowestRepositoryDurationMs 最慢 Repository 调用耗时，单位为毫秒
+     */
     record Snapshot(
             String handler,
             String userId,
@@ -141,6 +165,7 @@ public final class HttpRequestDiagnostics {
             String slowestRepository,
             double slowestRepositoryDurationMs) {
 
+        /** 尚未写入任何请求诊断数据时返回的全空快照，避免 finally 汇总阶段判空。 */
         private static final Snapshot EMPTY = new Snapshot(null, null, null, 0, 0, null, 0);
     }
 }

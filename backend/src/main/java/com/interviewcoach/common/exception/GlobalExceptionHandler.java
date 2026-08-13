@@ -14,14 +14,20 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * 全局异常处理器。
+ * 由 Spring MVC 创建并调用的 REST 接口统一异常边界。
+ *
+ * <p>该处理器把 Controller 链路抛出的已知异常转换为统一 {@link ApiResponse}，同时将业务码
+ * 写入当前请求诊断数据，供最外层 HTTP 完成日志消费；未预期异常只向客户端返回通用消息。</p>
  */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     /**
-     * 业务异常。没有底层 cause 的规则拒绝记 INFO；携带 cause 的处理失败记 WARN 和堆栈。
+     * 将业务异常的业务码和安全消息写入统一响应。
+     *
+     * <p>没有底层 cause 的规则拒绝记 INFO；携带 cause 的处理失败记 WARN 和堆栈。
+     * 此回调未设置 HTTP 状态，业务失败由响应体业务码表达。</p>
      */
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException e) {
@@ -36,7 +42,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 参数校验异常（@Valid）。
+     * 将 {@code @Valid} 产生的字段校验错误合并为消息，并返回 HTTP 400 与业务码 400。
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -51,7 +57,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 参数绑定异常。
+     * 将 Spring MVC 参数绑定错误合并为消息，并返回 HTTP 400 与业务码 400。
      */
     @ExceptionHandler(BindException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -65,7 +71,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 非法参数异常。
+     * 将接口链路抛出的非法参数消息原样放入统一响应，并返回 HTTP 400 与业务码 400。
      */
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -75,7 +81,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 非法状态异常。
+     * 将当前实现认定的非法状态记录为带堆栈警告，并返回 HTTP 400 与业务码 400。
      */
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -85,7 +91,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 访问拒绝异常。
+     * 将 Spring Security 的访问拒绝统一转换为 HTTP 403，不向客户端暴露内部拒绝原因。
      */
     @ExceptionHandler(AccessDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
@@ -95,7 +101,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Token 续期异常。
+     * 将续期入口抛出的令牌续期拒绝转换为 HTTP 401 与业务码 401。
      */
     @ExceptionHandler(TokenRefreshException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
@@ -105,7 +111,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 其他未处理异常。
+     * 兜底处理其他未捕获异常，记录一次错误堆栈并返回不含内部细节的 HTTP 500 响应。
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -119,14 +125,24 @@ public class GlobalExceptionHandler {
      * 构造错误响应的同时把业务码写回请求诊断上下文，供最外层 HTTP 结束日志判定结果。
      */
     private ApiResponse<Void> error(int code, String message) {
+        // 让请求结束日志同时看到响应体业务码；后台线程没有 HTTP 上下文时该调用会安全忽略。
         HttpRequestDiagnostics.setCurrentBusinessCode(code);
         return ApiResponse.error(code, message);
     }
 
+    /**
+     * 提取校验错误涉及的字段名，按首次出现顺序去重并以逗号连接，不记录字段值。
+     */
     private String fieldNames(java.util.List<FieldError> errors) {
         return errors.stream().map(FieldError::getField).distinct().collect(Collectors.joining(","));
     }
 
+    /**
+     * 沿异常 cause 链最多下探 20 层并返回截止处的类型名，避免异常链遍历失控。
+     *
+     * <p>20 层是当前固定诊断上限，精确取值依据缺失；更小会更早截断根因类型，
+     * 更大则增加异常日志处理开销。</p>
+     */
     private String rootType(Throwable error) {
         Throwable current = error;
         for (int depth = 0; current.getCause() != null && depth < 20; depth++) {
@@ -135,6 +151,11 @@ public class GlobalExceptionHandler {
         return current.getClass().getSimpleName();
     }
 
+    /**
+     * 将异常消息压成单行；空消息显示为 {@code -}，超过 500 个 UTF-16 代码单元时截断。
+     *
+     * <p>500 是当前固定日志上限，精确取值依据缺失；调小会减少诊断内容，调大则增加日志体积。</p>
+     */
     private String singleLine(String message) {
         if (message == null || message.isBlank()) {
             return "-";

@@ -52,12 +52,24 @@ import org.springframework.web.multipart.MultipartFile;
 @Component
 public class ControllerRequestLoggingAspect {
 
+    /**
+     * 序列化 Controller 参数时必须掩码的凭据字段规范名；匹配时会忽略大小写和分隔符，
+     * 并覆盖 {@code accessToken} 等以凭据名结尾的组合字段。
+     */
     private static final Set<String> CREDENTIAL_NAMES = Set.of(
             "password", "passwd", "pwd", "token", "auth", "authorization", "cookie", "secret",
             "apikey", "accesskey", "credential", "smscode", "verifycode",
             "verificationcode", "code");
 
+    /** 将已绑定的 Controller 参数转换为可递归脱敏的 JSON 树。 */
     private final ObjectMapper objectMapper;
+
+    /**
+     * DEBUG 参数 JSON 允许的最大 UTF-16 长度。
+     *
+     * <p>配置默认值为 16000，构造时最低限制为 1000，两个精确取值依据均缺失；调小会截断更多
+     * 调试信息，调大会增加单条日志体积，但不会改变请求处理结果。</p>
+     */
     private final int maxPayloadLength;
 
     public ControllerRequestLoggingAspect(
@@ -80,16 +92,20 @@ public class ControllerRequestLoggingAspect {
         String handler = method.getDeclaringClass().getSimpleName() + "." + method.getName();
         HttpServletRequest request = currentRequest();
         String userId = currentUserId();
+        // 把 MVC 已解析出的处理器和认证用户写入请求属性，供最外层过滤器完成日志汇总。
         HttpRequestDiagnostics.setHandler(request, handler);
         HttpRequestDiagnostics.setUserId(request, userId);
 
         if (log.isDebugEnabled()) {
+            // 只在 DEBUG 开启时序列化参数，并在 JSON 生成前递归掩码凭据和文件正文。
             log.debug("[HTTP] 请求参数: handler={}, userId={}, args={}",
                     handler, userId, serializeArguments(method, joinPoint.getArgs()));
         }
 
+        // 真正执行 Controller；任何异常保持原样交给全局异常处理器转换响应。
         Object result = joinPoint.proceed();
         if (result instanceof ApiResponse<?> response) {
+            // 正常返回时回填响应体业务码，使 HTTP 成功但业务失败仍能在结束日志中区分。
             HttpRequestDiagnostics.setBusinessCode(request, response.getCode());
         }
         return result;

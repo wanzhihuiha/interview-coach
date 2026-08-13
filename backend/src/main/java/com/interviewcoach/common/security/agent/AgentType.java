@@ -1,7 +1,10 @@
 package com.interviewcoach.common.security.agent;
 
 /**
- * Agent 身份类型，用于标识调用 Tool 的 Agent。
+ * 标识调用 Tool 的服务端 Agent 身份。
+ *
+ * <p>枚举名作为权限注解/YAML 中的稳定英文编码，并以字符串写入审计表；
+ * {@link #displayName} 由管理端审计响应转换为中文调用者 Label。</p>
  */
 public enum AgentType {
     /**
@@ -39,6 +42,7 @@ public enum AgentType {
      */
     JD_ANALYSIS("岗位分析");
 
+    /** 与稳定英文身份编码配套、供管理端响应展示的中文名称。 */
     private final String displayName;
 
     AgentType(String displayName) {

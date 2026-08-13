@@ -12,8 +12,13 @@ import org.slf4j.MDC;
  */
 public final class DiagnosticContext {
 
+    /** MDC 中串联同一次 HTTP 请求及其显式传播任务的请求标识键。 */
     public static final String REQUEST_ID = "requestId";
+
+    /** MDC 中标识当前异步岗位任务记录的任务 ID 键。 */
     public static final String TASK_ID = "taskId";
+
+    /** MDC 中标识当前岗位分析对象的岗位 ID 键。 */
     public static final String POSITION_ID = "positionId";
 
     private DiagnosticContext() {
@@ -74,6 +79,11 @@ public final class DiagnosticContext {
         }
     }
 
+    /**
+     * 一次 MDC 替换作用域；调用 {@link #close()} 会恢复进入前保存的三个诊断字段。
+     *
+     * <p>作用域只影响当前线程，不会自动传播给新线程或线程池任务。</p>
+     */
     @FunctionalInterface
     public interface Scope extends AutoCloseable {
 

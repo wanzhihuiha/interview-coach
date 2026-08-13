@@ -16,30 +16,71 @@ import org.springframework.stereotype.Component;
 /**
  * 第一阶段本地确定性检测器，覆盖明显指令挟制、高风险动作、一次性编码指令和 Unicode 控制字符。
  *
- * <p>规则命中只是风险信号，不能代替 DATA_ONLY 隔离、输出契约或服务端状态控制。</p>
+ * <p>该组件由 Spring 注入 {@link PromptRiskDetectorChain}，用于安全网关调用模型前和采用输出前的
+ * 本地检查。规则命中只是风险信号，不能代替 DATA_ONLY 隔离、输出契约或服务端状态控制。</p>
  */
 @Component
 @Qualifier(PromptRiskDetectorChain.DELEGATE_QUALIFIER)
 public class LocalPromptRiskDetector implements PromptRiskDetector {
 
+    /**
+     * 每个数据块最多保留 20 个风险信号，达到上限后停止该块后续检测结果的收集。
+     *
+     * <p>精确取值依据缺失；调小会更早丢弃后续类型的定位信息，调大则增加信号对象和日志统计负担。</p>
+     */
     private static final int MAX_SIGNALS_PER_BLOCK = 20;
+
+    /**
+     * Base64 或十六进制候选片段允许参与一次解码的最大字符数。
+     *
+     * <p>2048 是当前固定上限，精确取值依据缺失；调小可能漏检更长编码指令，调大则增加解码开销。</p>
+     */
     private static final int MAX_ENCODED_CANDIDATE_CHARACTERS = 2_048;
+
+    /**
+     * 可见指令规则统一使用的匹配标志：忽略大小写、启用 Unicode 大小写、跨行锚点和跨行通配。
+     */
     private static final int PATTERN_FLAGS = Pattern.CASE_INSENSITIVE
             | Pattern.UNICODE_CASE | Pattern.MULTILINE | Pattern.DOTALL;
+
+    /**
+     * 可见指令必须出现于文本起点或当前列举的标点/换行边界后的正则片段。
+     */
     private static final String INSTRUCTION_BOUNDARY =
             "(?:^|[\\r\\n\\\"'“”‘’\\[（(:：,，。！？.!?;；])(?:[\\s>*#-]*)";
+
+    /**
+     * 高风险动作规则接受的中英文祈使前缀正则片段。
+     */
     private static final String DIRECTIVE_PREFIX =
             "(?:(?:please|you\\s+must|must|请|现在|立即|务必|必须)\\s*)";
 
+    /**
+     * 匹配 16 至 2048 个字符的标准或 URL-safe Base64 候选，候选只解码一层。
+     *
+     * <p>最小长度 16 与最大长度 2048 的精确依据缺失；收窄会漏检候选，放宽会增加误匹配和解码成本。</p>
+     */
     private static final Pattern BASE64_CANDIDATE = Pattern.compile(
             "(?<![A-Za-z0-9+/_=-])[A-Za-z0-9+/_-]{16,"
                     + MAX_ENCODED_CANDIDATE_CHARACTERS
                     + "}={0,2}(?![A-Za-z0-9+/_=-])");
+
+    /**
+     * 匹配 32 至 2048 个十六进制字符的候选，候选只解码一层。
+     *
+     * <p>最小长度 32 与最大长度 2048 的精确依据缺失；收窄会漏检候选，放宽会增加误匹配和解码成本。</p>
+     */
     private static final Pattern HEX_CANDIDATE = Pattern.compile(
             "(?i)(?<![0-9a-f])[0-9a-f]{32,"
                     + MAX_ENCODED_CANDIDATE_CHARACTERS
                     + "}(?![0-9a-f])");
 
+    /**
+     * 当前可见指令规则及其风险类型、置信度。
+     *
+     * <p>规则内 24、32、40、48、64 个 UTF-16 代码单元的关联窗口均为当前固定匹配窗口，精确取值依据缺失；
+     * 缩短可能漏掉被间隔文本分开的诱导语，扩大则可能增加误报和正则处理成本。</p>
+     */
     private static final List<PatternRule> VISIBLE_INSTRUCTION_RULES = List.of(
             new PatternRule(
                     PromptRiskSignal.RiskType.INSTRUCTION_OVERRIDE,
@@ -139,17 +180,28 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
                             PATTERN_FLAGS),
                     PromptRiskSignal.Confidence.HIGH));
 
+    /**
+     * 按数据块依次执行 Unicode 控制字符、原文/兼容归一化可见指令、一次编码解码检测。
+     *
+     * <p>每块达到信号上限后，排在后面的检测步骤不会再为该块增加信号；最终返回不可变快照。</p>
+     */
     @Override
     public List<PromptRiskSignal> detect(List<LlmDataBlock> dataBlocks) {
         List<PromptRiskSignal> signals = new ArrayList<>();
         for (LlmDataBlock dataBlock : dataBlocks) {
+            // 先定位不可见控制字符，避免后续文本规则掩盖字符层风险。
             detectUnicodeControls(dataBlock, signals);
+            // 再检查原文以及 NFKC 归一化后才显现的可见指令模式。
             detectVisibleInstructions(dataBlock, signals);
+            // 最后只对有界候选做一次 Base64/十六进制解码，不递归解释解码结果。
             detectEncodedInstructions(dataBlock, signals);
         }
         return List.copyOf(signals);
     }
 
+    /**
+     * 按 Unicode 码点扫描单块文本，定位 C0/C1、零宽和双向控制字符，位置区间不使用 UTF-16 下标。
+     */
     private void detectUnicodeControls(LlmDataBlock dataBlock, List<PromptRiskSignal> signals) {
         String text = dataBlock.text();
         int utf16Offset = 0;
@@ -190,6 +242,11 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
         }
     }
 
+    /**
+     * 遍历一种编码候选，解码成功且出现可见指令时记录原候选在数据块中的码点区间。
+     *
+     * @return 处理完成后的当前数据块信号数量
+     */
     private int detectEncodedCandidates(
             LlmDataBlock dataBlock,
             List<PromptRiskSignal> signals,
@@ -213,12 +270,18 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
         return blockSignalCount;
     }
 
+    /**
+     * 对一次解码结果做 NFKC 归一化，只判断是否出现当前可见指令规则。
+     */
     private boolean containsVisibleInstruction(String text) {
         String normalized = Normalizer.normalize(text, Normalizer.Form.NFKC);
         return VISIBLE_INSTRUCTION_RULES.stream()
                 .anyMatch(rule -> rule.pattern().matcher(normalized).find());
     }
 
+    /**
+     * 解码标准或 URL-safe Base64；长度或字母表不合法时返回 {@code null}，不抛出检测异常。
+     */
     private String decodeBase64(String encoded) {
         if (encoded.length() % 4 == 1) {
             return null;
@@ -232,6 +295,9 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
         }
     }
 
+    /**
+     * 每两个十六进制字符转换一个字节；长度为奇数或字符非法时返回 {@code null}。
+     */
     private String decodeHex(String encoded) {
         if ((encoded.length() & 1) != 0) {
             return null;
@@ -248,6 +314,9 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
         return decodeUtf8(bytes);
     }
 
+    /**
+     * 使用严格 UTF-8 解码字节；畸形或不可映射输入返回 {@code null}，不使用替换字符继续匹配。
+     */
     private String decodeUtf8(byte[] bytes) {
         try {
             return StandardCharsets.UTF_8.newDecoder()
@@ -260,6 +329,9 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
         }
     }
 
+    /**
+     * 先匹配原始文本，再用 NFKC 归一化结果识别只在兼容转换后出现的混淆指令。
+     */
     private void detectVisibleInstructions(LlmDataBlock dataBlock, List<PromptRiskSignal> signals) {
         String text = dataBlock.text();
         int blockSignalCount = countSignals(signals, dataBlock.blockId());
@@ -292,6 +364,9 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
         }
     }
 
+    /**
+     * 将正则使用的 UTF-16 起止下标转换为风险信号要求的 Unicode 码点区间。
+     */
     private PromptRiskSignal signalForMatch(
             LlmDataBlock dataBlock, PatternRule rule, int startUtf16, int endUtf16) {
         String text = dataBlock.text();
@@ -306,6 +381,9 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
                 PromptRiskSignal.SuggestedDisposition.SUSPICIOUS);
     }
 
+    /**
+     * 将当前明确列举的控制码点映射为风险类型；普通字符返回 {@code null}。
+     */
     private PromptRiskSignal.RiskType unicodeRiskType(int codePoint) {
         if ((codePoint >= 0 && codePoint < 0x20
                 && codePoint != '\t' && codePoint != '\n' && codePoint != '\r')
@@ -329,15 +407,28 @@ public class LocalPromptRiskDetector implements PromptRiskDetector {
         return (int) signals.stream().filter(signal -> signal.blockId().equals(blockId)).count();
     }
 
+    /**
+     * 一条可见指令规则的不可变定义。
+     *
+     * @param riskType 命中后产生的风险类型
+     * @param pattern 用于当前块原文或归一化文本的正则表达式
+     * @param confidence 命中该规则时写入信号的置信等级
+     */
     private record PatternRule(
             PromptRiskSignal.RiskType riskType,
             Pattern pattern,
             PromptRiskSignal.Confidence confidence) {
     }
 
+    /**
+     * 将一种受支持的编码候选转换为文本；无法安全解码时返回 {@code null}。
+     */
     @FunctionalInterface
     private interface EncodedTextDecoder {
 
+        /**
+         * 对单个有界候选解码一次，不递归处理结果。
+         */
         String decode(String encoded);
     }
 }

@@ -19,6 +19,11 @@ import org.springframework.stereotype.Component;
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
 public class RepositoryTimingAspect {
 
+    /**
+     * 单次 Repository 调用记录慢调用警告的耗时阈值，单位为毫秒。
+     *
+     * <p>配置默认值为 500ms，精确取值依据缺失；调低会增加慢调用警告，调高则减少告警覆盖。</p>
+     */
     private final long slowThresholdMillis;
 
     public RepositoryTimingAspect(
@@ -35,11 +40,14 @@ public class RepositoryTimingAspect {
         String method = joinPoint.getSignature().toShortString();
         long startedAtNanos = System.nanoTime();
         try {
+            // 执行真实数据库仓储调用，返回值保持原样交回上层业务流程。
             Object result = joinPoint.proceed();
+            // 成功后把耗时写入当前 HTTP 聚合器；后台调用按阈值单独记录。
             recordSuccess(method, System.nanoTime() - startedAtNanos);
             return result;
         } catch (Throwable throwable) {
             long durationNanos = System.nanoTime() - startedAtNanos;
+            // 失败调用也计入当前 HTTP 请求统计；不存在请求上下文时仅保留独立仓储日志。
             HttpRequestDiagnostics.recordRepositoryCall(method, durationNanos);
             log.warn("[Repository] 调用失败: method={}, errorType={}, durationMs={}",
                     method,
@@ -57,6 +65,7 @@ public class RepositoryTimingAspect {
      * HTTP 请求内的普通调用只聚合，后台普通调用降到 TRACE；慢调用无论是否绑定请求都告警。
      */
     private void recordSuccess(String method, long durationNanos) {
+        // 聚合器返回是否绑定 HTTP 请求，用于区分请求内汇总和后台独立调用。
         boolean requestBound = HttpRequestDiagnostics.recordRepositoryCall(method, durationNanos);
         double durationMs = elapsedMillis(durationNanos);
         if (durationMs >= slowThresholdMillis) {

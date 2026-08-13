@@ -32,10 +32,29 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class HttpTimingFilter extends OncePerRequestFilter {
 
+    /** 上游请求标识的读取头和下游响应标识的写入头。 */
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
+
+    /**
+     * 允许沿用的上游 requestId 规则：仅字母、数字、点、下划线和连字符，长度 1 至 64。
+     *
+     * <p>64 是当前固定上限，精确取值依据缺失；调小会拒绝更多上游标识，调大则允许更长值
+     * 进入 MDC 与响应头。</p>
+     */
     private static final Pattern SAFE_REQUEST_ID = Pattern.compile("[A-Za-z0-9._-]{1,64}");
+
+    /**
+     * 查询参数、客户端地址和 User-Agent 写入日志前的最大 UTF-16 长度。
+     *
+     * <p>2000 是当前固定上限，精确取值依据缺失；调小会损失更多诊断内容，调大会增加日志体积。</p>
+     */
     private static final int MAX_TRANSPORT_VALUE_LENGTH = 2000;
 
+    /**
+     * 请求完成日志提升为 WARN 的耗时阈值，单位为毫秒。
+     *
+     * <p>配置默认值为 1000ms，精确取值依据缺失；调低会产生更多慢请求警告，调高则减少告警覆盖。</p>
+     */
     private final long slowThresholdMillis;
 
     public HttpTimingFilter(
@@ -65,6 +84,7 @@ public class HttpTimingFilter extends OncePerRequestFilter {
         long startedAtNanos = System.nanoTime();
         response.setHeader(REQUEST_ID_HEADER, requestId);
 
+        // 在当前请求线程建立 MDC 作用域，结束后恢复线程原值，避免容器线程复用串联错误。
         try (DiagnosticContext.Scope ignored = DiagnosticContext.openRequest(requestId)) {
             log.info("[HTTP] 请求开始: method={}, path={}, authPresent={}, "
                             + "contentType={}, contentLength={}",
@@ -82,11 +102,13 @@ public class HttpTimingFilter extends OncePerRequestFilter {
 
             Throwable failure = null;
             try {
+                // 继续执行安全过滤器、MVC 映射和 Controller；返回或抛错后统一进入完成汇总。
                 filterChain.doFilter(request, response);
             } catch (ServletException | IOException | RuntimeException | Error e) {
                 failure = e;
                 throw e;
             } finally {
+                // 即使下游异常也读取已聚合诊断数据并记录一次端到端结果，随后原异常继续传播。
                 logCompletion(request, response, startedAtNanos, failure);
             }
         }
@@ -102,6 +124,7 @@ public class HttpTimingFilter extends OncePerRequestFilter {
             long startedAtNanos,
             Throwable failure) {
         double durationMs = elapsedMillis(startedAtNanos);
+        // Controller、异常处理器和 Repository 切面共同写入请求属性，此处只消费结束快照。
         HttpRequestDiagnostics.Snapshot diagnostics = HttpRequestDiagnostics.snapshot(request);
         String handler = diagnostics.handler() == null
                 ? resolveHandler(request)
@@ -168,6 +191,10 @@ public class HttpTimingFilter extends OncePerRequestFilter {
         return null;
     }
 
+    /**
+     * 优先取 {@code X-Forwarded-For} 的第一个地址，否则取 Servlet 容器的远端地址；本方法不验证
+     * 代理可信边界，是否信任该请求头由部署链路负责。
+     */
     private String clientIp(HttpServletRequest request) {
         String forwardedFor = request.getHeader("X-Forwarded-For");
         if (forwardedFor != null && !forwardedFor.isBlank()) {
@@ -198,6 +225,9 @@ public class HttpTimingFilter extends OncePerRequestFilter {
         }
     }
 
+    /**
+     * 归一化查询参数名并判断是否属于需要掩码的凭据字段。
+     */
     private boolean isCredentialParameter(String name) {
         String normalized = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
         return normalized.equals("code")
