@@ -23,24 +23,45 @@ import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
 /**
- * 单实例岗位调度器：串行预留队首任务，取得本地容量后才创建虚拟线程 Worker。
- * Redis 负责公平预留和参与者占用，MySQL 领取结果决定任务是否真正进入 RUNNING。
+ * 当前 JVM 的岗位解析调度器：取得本地容量后串行预留队首任务，再创建虚拟线程 Worker。
+ * Redis 只负责公平预留和参与者占用，MySQL 条件更新决定任务是否真正进入 RUNNING；本类不证明部署为单实例。
+ * 当前实现没有跨实例调度租约或全局并发许可，多实例环境的整体领取所有权证据不足。
  */
 @Slf4j
 @Component
 public class PositionAnalysisDispatcher implements SmartLifecycle {
 
+    /** 当前 JVM 串行执行领取循环和延迟重试的单线程调度执行器。 */
     private final ScheduledExecutorService dispatchExecutor;
+    /** 在数据库领取成功后为每个模型任务创建虚拟线程的专用执行器。 */
     private final ExecutorService workerExecutor;
+    /** 提供 ready 轮转、参与者 busy 和任务预留的可重建 Redis 投影。 */
     private final PositionAnalysisRedisQueue queue;
+    /** 以 MySQL 事务原子领取任务并写入成功或失败终态的状态服务。 */
     private final PositionAnalysisStateService stateService;
+    /** 在事务外调用模型，并把结果交回状态服务收口的岗位 Worker。 */
     private final PositionAnalysisWorker worker;
+    /** 提供本机并发数和调度失败重试延迟的岗位解析配置。 */
     private final PositionAnalysisProperties properties;
+    /** 当前 JVM 的公平本地许可；许可数只限制本进程正在处理的岗位任务。 */
     private final Semaphore permits;
+    /** {@code true} 表示当前 JVM 已完成启动恢复并允许新领取，{@code false} 表示尚未开放或已停止。 */
     private final AtomicBoolean running = new AtomicBoolean(false);
+    /** {@code true} 表示已有一次领取循环排队或执行，用于合并重复唤醒。 */
     private final AtomicBoolean drainScheduled = new AtomicBoolean(false);
+    /** 串行化启动、停止与“Redis 已预留但尚未进入 DB 领取”的边界。 */
     private final Object lifecycleMonitor = new Object();
 
+    /**
+     * 装配当前 JVM 调度协作者，并按配置创建公平本地并发许可。
+     *
+     * @param dispatchExecutor 串行领取和重试执行器
+     * @param workerExecutor 岗位模型虚拟线程执行器
+     * @param queue Redis 队列投影
+     * @param stateService MySQL 任务状态事务服务
+     * @param worker 事务外模型 Worker
+     * @param properties 岗位解析运行配置
+     */
     public PositionAnalysisDispatcher(
             @Qualifier(PositionTaskExecutorConfiguration.DISPATCH_EXECUTOR)
             ScheduledExecutorService dispatchExecutor,
@@ -67,6 +88,7 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
             return;
         }
         try {
+            // 把多次事件和 Worker 完成通知合并为单个串行 drain，避免同一 JVM 并发操作领取循环。
             dispatchExecutor.execute(this::drain);
         } catch (RejectedExecutionException e) {
             drainScheduled.set(false);
@@ -145,6 +167,7 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
             while (running.get() && permits.tryAcquire()) {
                 Reservation reservation;
                 try {
+                    // 本机许可已取得后才在 Redis 原子预留参与者队首，避免无执行容量时提前占用队列。
                     reservation = queue.reserveNext();
                 } catch (RuntimeException e) {
                     permits.release();
@@ -166,10 +189,12 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
                 boolean stoppedBeforeStart = false;
                 synchronized (lifecycleMonitor) {
                     if (!running.get()) {
+                        // 停止信号先于数据库领取生效时，把尚属 WAITING 的 Redis 预留原样恢复。
                         safelyRestore(reservation);
                         stoppedBeforeStart = true;
                     } else {
                         try {
+                            // 以 MySQL 为事实源锁定岗位和当前任务；只有条件更新成功才得到 RUNNING 输入快照。
                             input = stateService.start(reservation.taskId());
                         } catch (RuntimeException e) {
                             startFailure = e;
@@ -181,6 +206,7 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
                     break;
                 }
                 if (startFailure != null) {
+                    // DB 结果未知时恢复预留并延迟重试，不能把 Redis 预留误认为任务已领取。
                     safelyRestore(reservation);
                     permits.release();
                     retryLater = true;
@@ -194,11 +220,13 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
                     log.debug("[PositionAnalysis] 数据库任务已失效，清理 Redis 旧预留: "
                                     + "taskId={}, queueOwner={}",
                             reservation.taskId(), reservation.queueOwner());
+                    // 数据库已明确拒绝旧任务，按原预留身份清理 busy，并允许该参与者后续任务重新进入轮转。
                     safelyFinish(reservation);
                     permits.release();
                     continue;
                 }
                 if (!Objects.equals(input.queueOwner(), reservation.queueOwner())) {
+                    // DB 领取后发现归属与 Redis 预留不一致，将 RUNNING 收口失败；未确认收口时必须保留 busy。
                     boolean stateClosed = markSchedulingFailed(
                             input.taskId(),
                             PositionAnalysisFailureCode.QUEUE_RESERVATION_INVALID,
@@ -214,12 +242,14 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
 
                 AnalysisInput workerInput = input;
                 try {
+                    // 领取已落为 RUNNING 后才创建虚拟线程；提交失败必须先写失败终态再释放 Redis 占用。
                     workerExecutor.execute(() -> runWorker(workerInput, reservation));
                     log.debug("[PositionAnalysis] Worker 已提交: taskId={}, positionId={}, queueOwner={}",
                             workerInput.taskId(), workerInput.positionId(), workerInput.queueOwner());
                 } catch (RuntimeException e) {
                     log.error("[PositionAnalysis] 虚拟线程提交失败: taskId={}, errorType={}",
                             workerInput.taskId(), e.getClass().getSimpleName(), e);
+                    // 通过源状态条件把本次 RUNNING 收口为稳定失败分类，迟到或旧任务不会覆盖当前事实。
                     boolean stateClosed = markSchedulingFailed(
                             workerInput.taskId(),
                             PositionAnalysisFailureCode.WORKER_SUBMISSION_FAILED,
@@ -255,11 +285,14 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
             }
             boolean stateClosed = false;
             try {
+                // Worker 在事务外调用 LLM，并仅在成功或失败状态事务得到确定结果时返回 true。
                 stateClosed = worker.execute(input);
             } finally {
                 try {
+                    // 只有数据库终态已确认才释放对应 Redis busy；否则保留占用等待启动恢复。
                     finishIfStateClosed(reservation, stateClosed);
                 } finally {
+                    // 无论模型和清理路径如何退出，本机许可都只释放一次，并尝试继续本地调度。
                     permits.release();
                     wake();
                 }
@@ -275,6 +308,7 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
     private boolean markSchedulingFailed(
             Long taskId, PositionAnalysisFailureCode failureCode, String message) {
         try {
+            // 状态服务只接受仍为当前 RUNNING 的任务；返回的具体归档/过期结果均表示数据库已确定收口。
             stateService.fail(taskId, failureCode.name(), message);
             return true;
         } catch (RuntimeException e) {
@@ -361,6 +395,7 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
             return;
         }
         try {
+            // 延迟值来自配置且必须为正；到期后仍经 wake 合并重复调度请求。
             dispatchExecutor.schedule(this::wake, delay.toNanos(), TimeUnit.NANOSECONDS);
         } catch (RejectedExecutionException e) {
             if (running.get()) {
@@ -370,6 +405,9 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
         }
     }
 
+    /**
+     * 提取至多 20 层异常链中的末端消息，并将日志文本截为 500 个 UTF-16 字符；两项精确取值依据缺失。
+     */
     private String errorMessage(Throwable error) {
         Throwable current = error;
         for (int depth = 0; current.getCause() != null && depth < 20; depth++) {
@@ -383,6 +421,9 @@ public class PositionAnalysisDispatcher implements SmartLifecycle {
         return value.length() <= 500 ? value : value.substring(0, 500) + "...(truncated)";
     }
 
+    /**
+     * 把 DEBUG 输入改为单行并截为 5000 个 UTF-16 字符，避免无限日志；精确上限依据缺失。
+     */
     private String debugContent(String value) {
         if (value == null) {
             return "<null>";

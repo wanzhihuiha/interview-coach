@@ -19,15 +19,26 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * 数据库提交后只把轻量入队工作交给有界执行器，HTTP 线程不等待 Redis 重试。
  * fallbackExecution 同时兼容“事件在事务内发布”和“数据库事务已经返回后发布”两条路径。
+ * 投影失败不会回滚或改写 MySQL 任务；当前实现依赖告警、惰性清理和下次应用启动重建，不承诺运行中必达。
  */
 @Slf4j
 @Component
 public class PositionAnalysisEnqueueEventListener {
 
+    /** 承载 Redis 增删投影和有限重试的有界平台线程执行器。 */
     private final ExecutorService executor;
+    /** 延迟取得实际 Redis 投影端口；组件缺失时保留 MySQL 事实并记录告警。 */
     private final ObjectProvider<PositionAnalysisQueueProjector> projectorProvider;
+    /** 提供投影最大尝试次数及相邻尝试等待时间的解析配置。 */
     private final PositionAnalysisProperties properties;
 
+    /**
+     * 装配事务后投影监听器。
+     *
+     * @param executor Redis 投影专用有界执行器
+     * @param projectorProvider Redis 投影端口提供者
+     * @param properties 投影重试配置
+     */
     public PositionAnalysisEnqueueEventListener(
             @Qualifier(PositionTaskExecutorConfiguration.ENQUEUE_EXECUTOR) ExecutorService executor,
             ObjectProvider<PositionAnalysisQueueProjector> projectorProvider,
@@ -45,11 +56,13 @@ public class PositionAnalysisEnqueueEventListener {
     public void onRequested(PositionAnalysisRequestedEvent event) {
         String requestId = DiagnosticContext.currentRequestId();
         try {
+            // 数据库已经提交，只把轻量 Redis 投影交给有界线程池，HTTP 调用不等待后续重试。
             executor.execute(() -> {
                 try (DiagnosticContext.Scope ignored = DiagnosticContext.openPositionTask(
                         requestId, event.taskId(), event.positionId())) {
                     log.info("[PositionAnalysis] 数据库事务已提交，开始 Redis 队列投影: queueOwner={}",
                             event.queueOwner());
+                    // 幂等入队失败时在同一后台任务内有限重试，耗尽后仍保留 MySQL WAITING。
                     enqueueWithRetry(event);
                 }
             });
@@ -68,9 +81,11 @@ public class PositionAnalysisEnqueueEventListener {
     public void onWaitingRemoved(PositionAnalysisWaitingRemovedEvent event) {
         String requestId = DiagnosticContext.currentRequestId();
         try {
+            // 删除事实已提交后异步清理 Redis WAITING 投影，执行器拒绝不会恢复数据库任务。
             executor.execute(() -> {
                 try (DiagnosticContext.Scope ignored = DiagnosticContext.openPositionTask(
                         requestId, event.taskId(), null)) {
+                    // 旧投影即使暂时残留，领取时仍需通过 MySQL 当前任务与源状态校验。
                     removeWaitingWithRetry(event);
                 }
             });
@@ -86,6 +101,7 @@ public class PositionAnalysisEnqueueEventListener {
      * 不把任务改为失败；应用下次启动时会根据数据库事实重建队列。
      */
     private void enqueueWithRetry(PositionAnalysisRequestedEvent event) {
+        // 投影实现未装配时不能生成 Redis 队列成员，只留下可在下次启动重建的 MySQL WAITING 事实。
         PositionAnalysisQueueProjector projector = projectorProvider.getIfAvailable();
         if (projector == null) {
             log.error("[PositionAnalysis] Redis 队列投影未装配，任务保留在 MySQL: queueOwner={}",
@@ -95,6 +111,7 @@ public class PositionAnalysisEnqueueEventListener {
 
         for (int attempt = 1; attempt <= properties.getEnqueueMaxAttempts(); attempt++) {
             try {
+                // 端口调用幂等写入任务投影并唤醒当前 JVM 调度器；成功后本事件结束。
                 projector.enqueue(event.taskId(), event.queueOwner());
                 log.info("[PositionAnalysis] Redis 队列投影完成: queueOwner={}, attempt={}",
                         event.queueOwner(), attempt);
@@ -110,6 +127,7 @@ public class PositionAnalysisEnqueueEventListener {
                 log.debug("[PositionAnalysis] Redis 入队失败，准备重试: queueOwner={}, "
                                 + "attempt={}, errorType={}",
                         event.queueOwner(), attempt, e.getClass().getSimpleName(), e);
+                // 相邻尝试按配置暂停；中断时恢复线程标记并停止当前投影任务。
                 if (!pauseBeforeRetry(properties.getEnqueueRetryDelay())) {
                     log.warn("[PositionAnalysis] Redis 入队线程被中断，任务等待启动重建: "
                                     + "queueOwner={}, attempt={}",
@@ -124,6 +142,7 @@ public class PositionAnalysisEnqueueEventListener {
      * 尝试清除已失效的 WAITING 投影。移除失败不会恢复数据库状态，后续 DB 领取校验或启动重建会清理旧成员。
      */
     private void removeWaitingWithRetry(PositionAnalysisWaitingRemovedEvent event) {
+        // 没有投影实现时不影响已提交的删除事实，旧 Redis 成员留给后续惰性清理或启动重建。
         PositionAnalysisQueueProjector projector = projectorProvider.getIfAvailable();
         if (projector == null) {
             log.warn("[PositionAnalysis] Redis 队列投影尚未装配，等待启动重建: taskId={}",
@@ -133,6 +152,7 @@ public class PositionAnalysisEnqueueEventListener {
 
         for (int attempt = 1; attempt <= properties.getEnqueueMaxAttempts(); attempt++) {
             try {
+                // 按 taskId 和 queueOwner 幂等移除 WAITING 投影，不触碰可能仍 busy 的 Worker 任务。
                 projector.removeWaiting(event.taskId(), event.queueOwner());
                 log.debug("[PositionAnalysis] Redis WAITING 投影已移除: queueOwner={}, attempt={}",
                         event.queueOwner(), attempt);
@@ -173,6 +193,9 @@ public class PositionAnalysisEnqueueEventListener {
         }
     }
 
+    /**
+     * 提取至多 20 层异常链中的末端消息，并将日志文本截为 500 个 UTF-16 字符；两项精确取值依据缺失。
+     */
     private String errorMessage(Throwable error) {
         Throwable current = error;
         for (int depth = 0; current.getCause() != null && depth < 20; depth++) {

@@ -12,12 +12,17 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * JD 分析智能体，负责调用 LLM 解析岗位描述并生成岗位画像。
+ * 岗位 Worker 调用的 JD 分析组件，在 JD_ANALYSIS 权限上下文中请求共享 LLM、解析 JSON 并校验候选画像。
+ * 成功结果交给状态服务保存为当前任务候选；空响应、非法 JSON 或结构缺失均失败，不生成兜底画像。
  */
 @Component
 @RequiredArgsConstructor
 public class JdAnalysisAgent {
 
+    /**
+     * 约束模型角色、输入用途和纯 JSON 输出格式的系统提示词。
+     * 该文本不声明外部知识来源或模型能力边界，具体措辞的版本和责任依据未在当前可靠资料中记录。
+     */
     private static final String SYSTEM_PROMPT = """
             你是一个专业的岗位解析助手，负责从 JD（岗位描述）中提取关键信息并生成结构化的岗位画像。
             你需要结合 JD 原文和互联网行业通用面试考察点，推测技能要求、考察方向和面试重点。
@@ -25,9 +30,9 @@ public class JdAnalysisAgent {
             """;
 
     /**
-     * 参考知识：不同岗位大类的常见技能要求与面试考察点。
-     * 资料综合自 2025-2026 年 CSDN、掘金、知乎、牛客网、人人都是产品经理等平台的最新面试趋势，
-     * 用于辅助 LLM 在 JD 信息不完整时补充合理的考察方向。
+     * 源码内置的岗位技能与面试考察静态参考文本，在 JD 信息不完整时随用户提示一起发送给模型。
+     * 当前仓库没有可核验的来源、采集日期、版本、责任人或更新机制，不能将其中年份、平台趋势或权重表述视为已确认事实。
+     * Java 岗位权重，以及 L1-L5、考察方向 4-8、优先级 1-5、示例问题 2-3、关注维度 3-5 和置信值 0-1 的精确依据均缺失。
      */
     private static final String POSITION_KNOWLEDGE_BASE = """
             【Java 高级工程师（2025-2026）】
@@ -51,6 +56,10 @@ public class JdAnalysisAgent {
             考察方向：增长策略制定、活动策划与复盘、用户分层与生命周期运营、内容/社群冷启动、数据指标拆解、渠道投放 ROI 优化、竞品与市场分析、危机公关与舆情处理。
             """;
 
+    /**
+     * 将内置参考文本和当前 JD 拼接为模型用户消息，并要求返回 {@link PositionProfileData} 对应的 JSON。
+     * 模板中的数量、等级、权重和“当前趋势”要求是当前固定运行文本，其可靠来源及精确取值依据缺失。
+     */
     private static final String USER_PROMPT_TEMPLATE = """
             请根据以下 JD 文本生成结构化的岗位画像 JSON。
 
@@ -96,39 +105,47 @@ public class JdAnalysisAgent {
             %s
             """;
 
+    /** 共享模型调用入口；具体供应商、路由和最终超时由共享 LLM 层决定。 */
     private final LlmService llmService;
+
+    /** 将模型响应 JSON 反序列化为岗位候选画像的项目 JSON 映射器。 */
     private final ObjectMapper objectMapper;
 
     /**
-     * 分析 JD 文本并生成岗位画像。
+     * 使用默认调用上下文分析 JD 文本；内部仍进入 JD_ANALYSIS 权限并执行完整结构校验。
      *
      * @param jdText JD 文本
      * @return 岗位画像数据
      */
     public PositionProfileData analyze(String jdText) {
+        // 复用带岗位大类参数的稳定入口；当前实现不按该参数选择知识板块或兜底。
         return analyze(jdText, null);
     }
 
     /**
-     * 分析 JD 文本并生成必须通过结构校验的岗位画像；岗位大类保留为调用契约上下文。
+     * 在 JD_ANALYSIS Agent 权限上下文中分析 JD，并只返回通过当前结构校验的候选画像。
      *
      * @param jdText      JD 文本
      * @param jobCategory 岗位大类（当前 prompt 已包含 JD，本阶段不用于失败兜底）
      * @return 通过校验的岗位画像数据
      */
     public PositionProfileData analyze(String jdText, String jobCategory) {
+        // 通过 AgentContext 限制共享 LLM 调用身份；jobCategory 当前仅保留在方法契约中，不改变 Prompt 或降级路径。
         return AgentContext.runAs(AgentType.JD_ANALYSIS, () -> analyzeRequired(jdText));
     }
 
+    /** 校验输入、构造模型消息、执行远程调用并依次完成 JSON 与画像结构校验。 */
     private PositionProfileData analyzeRequired(String jdText) {
         if (jdText == null || jdText.isBlank()) {
             throw new PositionAnalysisException(
                     PositionAnalysisFailureCode.INPUT_INVALID,
                     "岗位 JD 为空，请重新提交");
         }
+        // 把源码内置静态参考和数据库读取出的 JD 原文一并写入用户消息；参考文本没有外部来源证明。
         String userPrompt = String.format(USER_PROMPT_TEMPLATE, POSITION_KNOWLEDGE_BASE, jdText);
         String response;
         try {
+            // 远程 LLM 调用位于岗位状态事务外；异常统一转换为可持久化的稳定失败分类。
             response = llmService.chat(SYSTEM_PROMPT, userPrompt);
         } catch (RuntimeException e) {
             throw new PositionAnalysisException(
@@ -141,12 +158,15 @@ public class JdAnalysisAgent {
                     PositionAnalysisFailureCode.LLM_EMPTY_RESPONSE,
                     "岗位解析模型返回空结果，请重新解析");
         }
+        // 先从模型文本中提取并反序列化 JSON，再校验必需对象、集合、元素与数值范围。
         PositionProfileData profile = parseProfile(response);
         validateProfile(profile);
         return profile;
     }
 
+    /** 从模型原始文本提取候选 JSON，并将解析失败转换为稳定的非法 JSON 分类。 */
     private PositionProfileData parseProfile(String rawResponse) {
+        // 容忍代码块或包裹说明中的首尾 JSON 对象，但不会修补缺失字段或无效值。
         String json = extractJson(rawResponse);
         try {
             return objectMapper.readValue(json, PositionProfileData.class);
@@ -159,7 +179,8 @@ public class JdAnalysisAgent {
     }
 
     /**
-     * 模型输出必须满足当前岗位画像契约；缺字段或空对象不能静默转成成功候选。
+     * 模型输出必须满足当前岗位画像契约；缺字段、空关键集合、坏元素或置信值越界不能静默转成成功候选。
+     * 当前只强制优先级 1-5 和置信值 0-1；Prompt 中其他数量要求没有在此全部校验，精确范围依据缺失。
      */
     private void validateProfile(PositionProfileData profile) {
         if (profile == null
@@ -176,6 +197,7 @@ public class JdAnalysisAgent {
                 && profile.getProbingDirections().isEmpty()) {
             invalidProfile();
         }
+        // 分别核对两类技能和每个追问方向，任何坏元素都会让整份候选失败。
         profile.getRequiredSkills().forEach(this::validateSkill);
         profile.getPreferredSkills().forEach(this::validateSkill);
         profile.getProbingDirections().forEach(this::validateDirection);
@@ -189,6 +211,7 @@ public class JdAnalysisAgent {
         }
     }
 
+    /** 要求单项技能对象及名称、重要性和深度文本均存在；不校验固定词表。 */
     private void validateSkill(PositionProfileData.SkillItem skill) {
         if (skill == null
                 || isBlank(skill.getSkill())
@@ -198,6 +221,7 @@ public class JdAnalysisAgent {
         }
     }
 
+    /** 要求追问方向字段完整、优先级为 1 至 5 且至少包含一个非空示例问题。 */
     private void validateDirection(PositionProfileData.ProbingDirection direction) {
         if (direction == null
                 || isBlank(direction.getDirection())
@@ -212,10 +236,12 @@ public class JdAnalysisAgent {
         }
     }
 
+    /** 判断模型文本字段是否缺失或只包含空白。 */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
 
+    /** 以稳定失败分类拒绝任一结构不完整候选，不返回部分画像。 */
     private void invalidProfile() {
         throw new PositionAnalysisException(
                 PositionAnalysisFailureCode.LLM_INVALID_PROFILE,
@@ -223,7 +249,8 @@ public class JdAnalysisAgent {
     }
 
     /**
-     * 从 LLM 响应中提取 JSON 内容，支持 Markdown 代码块和普通 JSON。
+     * 从 LLM 响应中提取 JSON 内容：优先取 Markdown 代码块，否则取首个左花括号至最后一个右花括号，最后退回原文本。
+     * 该方法只定位文本，不判断 JSON 或画像是否合法；后续反序列化和结构校验负责失败分类。
      */
     private String extractJson(String rawResponse) {
         if (rawResponse == null || rawResponse.isBlank()) {
