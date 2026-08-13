@@ -1,7 +1,10 @@
 package com.interviewcoach.resume.application.dto;
 
 /**
- * 手动辅助分析请求。mode 由应用服务转换为公开模式，feedback 只在当前调用链内存中使用。
+ * 手动辅助分析请求。
+ *
+ * @param mode 公开的分析模式编码，由应用服务解析并限制为 REGENERATE 或 REFINE；为空或非法时拒绝请求
+ * @param feedback REFINE 模式必填的用户反馈，REGENERATE 模式会忽略；属于敏感输入且只在当前调用链内存中存在
  */
 public record ResumeProfileAnalysisRetryRequest(String mode, String feedback) {
 

@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
- * 基于 Spring AI 的真实 LLM 服务实现，支持多厂商路由与主备切换。
+ * 在 {@code resume.llm.enabled=true} 时装配的真实模型传输服务，按配置路由主模型并在失败时尝试一个不同的备用模型。
  */
 @Slf4j
 @Service
@@ -19,9 +19,12 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class SpringAiLlmService implements LlmService {
 
+    /** DEBUG 原文单字段最多保留 20000 个字符；依据缺失，调大会增加敏感数据暴露，调小会截断更多排障上下文。 */
     private static final int MAX_DEBUG_CONTENT_LENGTH = 20000;
 
+    /** 根据路由结果创建对应协议的真实模型客户端。 */
     private final ChatClientFactory chatClientFactory;
+    /** 从运行时配置解析 L2 主用和备用厂商、模型。 */
     private final ModelRouter modelRouter;
 
     /**
@@ -31,6 +34,7 @@ public class SpringAiLlmService implements LlmService {
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.REPORT,
             AgentType.COACH, AgentType.RESUME_ANALYSIS, AgentType.JD_ANALYSIS})
     public String chat(String systemPrompt, String userPrompt) {
+        // 当前通用入口固定使用 L2 路由；生产实际厂商和主备关系由配置决定。
         return doChat(ModelTier.L2, systemPrompt, userPrompt);
     }
 
@@ -38,10 +42,12 @@ public class SpringAiLlmService implements LlmService {
      * 先调用主模型；主模型失败时仅在备用配置不同的情况下执行一次降级调用。
      */
     private String doChat(ModelTier tier, String systemPrompt, String userPrompt) {
+        // 先解析主路由并执行真实远程调用，配置或调用失败均进入备用判断。
         VendorModel primary = modelRouter.selectPrimary(tier);
         try {
             return callModel(primary, systemPrompt, userPrompt);
         } catch (Exception e) {
+            // 仅当备用厂商或模型与主用不同才执行第二次远程调用，否则保留原异常作为失败原因。
             VendorModel fallback = modelRouter.selectFallback(tier);
             if (fallback.getVendorKey().equals(primary.getVendorKey())
                     && fallback.getModel().equals(primary.getModel())) {
@@ -68,7 +74,9 @@ public class SpringAiLlmService implements LlmService {
                     debugContent(userPrompt));
         }
         try {
+            // 用路由携带的认证、地址和模型配置创建客户端；构建失败同样交由上层降级。
             ChatClient chatClient = chatClientFactory.createChatClient(vendorModel);
+            // 将系统提示词和用户提示词发送给所选外部模型供应商，空响应原样返回给 Agent 判定失败。
             String response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
@@ -115,6 +123,10 @@ public class SpringAiLlmService implements LlmService {
                         + "...(truncated,totalLength=" + singleLine.length() + ")";
     }
 
+    /**
+     * 提取最深层异常的单行消息用于 DEBUG，最多追踪 20 层并截断至 500 字符；两个固定值依据缺失，
+     * 调大增加日志体积和内部信息暴露，调小会减少可定位上下文。
+     */
     private String errorMessage(Throwable error) {
         Throwable current = error;
         for (int depth = 0; current.getCause() != null && depth < 20; depth++) {

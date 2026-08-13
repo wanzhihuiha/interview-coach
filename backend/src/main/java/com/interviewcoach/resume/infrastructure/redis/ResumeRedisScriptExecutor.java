@@ -13,8 +13,12 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ResumeRedisScriptExecutor {
 
+    /** 使用项目现有字符串序列化执行 Lua 的 Redis 模板。 */
     private final StringRedisTemplate redisTemplate;
 
+    /**
+     * 以唯一 Key 和有序字符串参数执行返回 Long 的 Lua；空返回和 Redis 异常原样交给额度服务失败关闭。
+     */
     public Long execute(DefaultRedisScript<Long> script, String key, String... args) {
         return redisTemplate.execute(script, List.of(key), (Object[]) args);
     }

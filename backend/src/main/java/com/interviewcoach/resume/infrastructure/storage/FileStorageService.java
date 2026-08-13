@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class FileStorageService {
 
+    /** 配置的本地简历存储根目录，初始化时转换为绝对规范路径；是否跨实例共享无法由源码确认。 */
     private final Path storagePath;
 
     /**
@@ -47,6 +48,7 @@ public class FileStorageService {
         String fileName = UUID.randomUUID() + "_" + System.currentTimeMillis() + extension;
         Path userDir = storagePath.resolve(String.valueOf(userId));
         try {
+            // 先创建用户隔离目录，再把上传流复制到服务端生成的文件名；成功返回供数据库登记的绝对路径。
             Files.createDirectories(userDir);
             Path target = userDir.resolve(fileName);
             try (InputStream inputStream = file.getInputStream()) {
@@ -75,6 +77,7 @@ public class FileStorageService {
         }
     }
 
+    /** 保留原始文件名最后一个点及其后缀；无后缀时返回空字符串。 */
     private String getExtension(String fileName) {
         if (fileName == null || !fileName.contains(".")) {
             return "";

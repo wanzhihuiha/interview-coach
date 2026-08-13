@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ResumeParseExecutorConfig {
 
+    /** 事实解析和辅助分析监听器共同注入的逐任务执行器 Bean 名称。 */
     public static final String EXECUTOR_BEAN_NAME = "resumeParseExecutor";
     /**
      * 每个被准入的任务立即获得独立虚拟线程，不再使用固定平台线程或业务等待队列。

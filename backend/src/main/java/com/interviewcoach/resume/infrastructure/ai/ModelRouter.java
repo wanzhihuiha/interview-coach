@@ -6,19 +6,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 模型路由器，根据任务层级选择主用厂商/模型，主用失败时返回备用厂商/模型。
+ * 把任务层级的主备表达式解析为可建客户端的厂商和模型；生产路由取决于运行时配置。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ModelRouter {
 
+    /** 提供层级路由和厂商连接配置。 */
     private final LlmProperties llmProperties;
 
     /**
      * 根据层级选择主用厂商和模型。
      */
     public VendorModel selectPrimary(ModelTier tier) {
+        // 先定位层级槽位，再校验主用表达式、厂商启用状态和最终模型名。
         LlmProperties.VendorModelConfig config = getTierConfig(tier);
         return resolveVendorModel(config.getPrimary());
     }
@@ -27,6 +29,7 @@ public class ModelRouter {
      * 根据层级选择备用厂商和模型。
      */
     public VendorModel selectFallback(ModelTier tier) {
+        // 备用表达式使用与主用相同的解析规则；非法配置会在实际降级前失败。
         LlmProperties.VendorModelConfig config = getTierConfig(tier);
         return resolveVendorModel(config.getFallback());
     }
@@ -40,6 +43,7 @@ public class ModelRouter {
                 cause.getClass().getSimpleName());
     }
 
+    /** 返回任务层级对应的路由槽位。 */
     private LlmProperties.VendorModelConfig getTierConfig(ModelTier tier) {
         return switch (tier) {
             case L1 -> llmProperties.getTiers().getL1();
@@ -72,6 +76,7 @@ public class ModelRouter {
         return new VendorModel(vendorKey, vendorType, vendorConfig, model);
     }
 
+    /** 将配置文本转换为受支持协议类型，空值或未知类型直接拒绝。 */
     private VendorType parseVendorType(String type) {
         if (type == null || type.isBlank()) {
             throw new IllegalArgumentException("厂商类型不能为空");

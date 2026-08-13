@@ -11,15 +11,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 在事务外调用模型生成画像分析，通过短事务写回，并按数据库确认的终态结算 quota。
+ * 消费携带任务许可的辅助分析事件，在数据库短事务之间调用模型生成待验证选题线索。
+ * 状态服务负责认领和写回，Worker 只在任务许可有效时持久化结果，并按数据库确认终态结算 Redis 额度。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ResumeProfileAnalysisWorker {
 
+    /** 认领任务、标记首次模型调用、写回结果及清理额度恢复凭据的状态服务。 */
     private final ResumeProfileAnalysisStateService stateService;
+    /** 基于已确认事实、旧分析和可选反馈调用 LLM 的辅助分析 Agent。 */
     private final ResumeProfileAnalysisAgent analysisAgent;
+    /** 标记手动任务模型调用开始并结算每日 AI 额度的 Redis 服务。 */
     private final ResumeAiQuotaService quotaService;
 
     /**
@@ -32,12 +36,14 @@ public class ResumeProfileAnalysisWorker {
             if (event.taskLease() == null) {
                 throw new IllegalStateException("AI task lease is required before worker execution");
             }
+            // 锁定并认领当前任务，读取正式事实、旧结果、实际模式和数据库保存的额度凭据。
             ResumeProfileAnalysisStateService.AnalysisInput input = stateService.start(
                     event.resumeId(),
                     event.userId(),
                     event.taskGeneration(),
                     event.taskProfileHash());
             if (input == null) {
+                // 任务或正式画像版本已经变化，先确认数据库终态再决定额度能否结算。
                 outcome = confirmFailure(
                         event,
                         quotaReservation,
@@ -45,12 +51,14 @@ public class ResumeProfileAnalysisWorker {
                         "画像分析任务状态已变化，请稍后重试");
             } else {
                 quotaReservation = input.quotaReservation();
+                // Agent 在真正发送模型请求前执行回调，消费免费 INITIAL 资格或标记手动额度已开始。
                 ResumeProfileAnalysisData data = analysisAgent.analyze(
                         input.profileData(),
                         input.previousAnalysis(),
                         event.feedback(),
                         input.taskMode(),
                         () -> markModelCallStarted(event, input));
+                // 许可仍有效时才写回；许可丢失会阻止旧执行者覆盖当前任务。
                 boolean completed = event.taskLease().executeIfValid(() -> stateService.complete(
                         event.resumeId(),
                         event.userId(),
@@ -78,9 +86,14 @@ public class ResumeProfileAnalysisWorker {
                     "[ResumeProfileAnalysis] 分析执行异常: resumeId={}, outcome={}, errorType={}",
                     event.resumeId(), outcome, e.getClass().getSimpleName());
         }
+        // 所有成功和失败路径最终都按数据库可确认结果结算，UNKNOWN 会保留恢复凭据。
         settleQuota(event, quotaReservation, outcome, "WORKER_COMPLETION");
     }
 
+    /**
+     * 在模型调用紧前记录不可回退的调用开始事实。
+     * 免费 INITIAL 写数据库首次标记，手动模式写 Redis 额度状态；任何不匹配都阻止外部调用。
+     */
     private void markModelCallStarted(
             ResumeProfileAnalysisRequestedEvent event,
             ResumeProfileAnalysisStateService.AnalysisInput input) {
@@ -106,6 +119,7 @@ public class ResumeProfileAnalysisWorker {
         }
     }
 
+    /** 按归属、代次、事实 hash 和额度凭据写失败终态；无法确认时返回 UNKNOWN。 */
     private ResumeAiTaskOutcome confirmFailure(
             ResumeProfileAnalysisRequestedEvent event,
             ResumeAiQuotaReservation quotaReservation,
@@ -130,6 +144,7 @@ public class ResumeProfileAnalysisWorker {
         }
     }
 
+    /** 同日 Redis 转换成功或额度日期关闭后才按任务凭据清除数据库字段，失败时留给启动恢复处理。 */
     private void settleQuota(
             ResumeProfileAnalysisRequestedEvent event,
             ResumeAiQuotaReservation quotaReservation,
@@ -171,6 +186,7 @@ public class ResumeProfileAnalysisWorker {
      * 队列拒绝时先确认当前任务失败，再结算 quota；不改变正式画像和面试资格。
      */
     public void markSchedulingFailed(ResumeProfileAnalysisRequestedEvent event) {
+        // 事件已登记但执行器拒绝时，将当前任务落为失败后再结算其额度。
         ResumeAiTaskOutcome outcome = confirmFailure(
                 event,
                 event.quotaReservation(),
@@ -183,6 +199,7 @@ public class ResumeProfileAnalysisWorker {
      * 准入失败时确认当前分析代次失败并结算 quota，保留旧成功结果且不恢复面试可用性。
      */
     public void markAdmissionFailed(ResumeProfileAnalysisRequestedEvent event) {
+        // 后台准入未通过时任务不会调用模型，仍按数据库确认结果处理可能存在的预留。
         ResumeAiTaskOutcome outcome = confirmFailure(
                 event,
                 event.quotaReservation(),

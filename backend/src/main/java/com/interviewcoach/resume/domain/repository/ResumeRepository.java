@@ -17,7 +17,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
- * 简历数据访问层。
+ * 简历主记录的 JPA 仓储，供用户接口、解析状态机和当前进程启动恢复读取数据库事实。
  */
 @Repository
 public interface ResumeRepository extends JpaRepository<Resume, Long> {
@@ -37,6 +37,7 @@ public interface ResumeRepository extends JpaRepository<Resume, Long> {
      */
     Optional<Resume> findByIdAndUserId(Long id, Long userId);
 
+    /** 查询指定解析状态且仍保存额度凭据的简历，供当前进程启动恢复逐项结算。 */
     List<Resume> findByParseStatusInAndParseQuotaDateIsNotNullAndParseQuotaTokenIsNotNull(
             Collection<ResumeParseStatus> statuses);
 
@@ -47,6 +48,11 @@ public interface ResumeRepository extends JpaRepository<Resume, Long> {
     @Query("select r from Resume r where r.id = :id and r.userId = :userId")
     Optional<Resume> findByIdAndUserIdForUpdate(@Param("id") Long id, @Param("userId") Long userId);
 
+    /**
+     * 将所有遗留的指定解析状态批量标记失败并清除认领时间。
+     *
+     * <p>该 JPQL 更新绕过实体回调，调用方显式传入更新时间；返回实际受影响行数供恢复日志使用。</p>
+     */
     @Modifying
     @Query("update Resume r set r.parseStatus = :failedStatus, r.parseStartedAt = null, "
             + "r.parseErrorCode = :errorCode, r.parseErrorMessage = :errorMessage, r.updatedAt = :updatedAt "

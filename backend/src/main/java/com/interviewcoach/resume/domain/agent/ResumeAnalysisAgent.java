@@ -13,19 +13,28 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 从脱敏后的简历文本中提取可核对事实；主观判断由独立画像分析 Agent 负责。
+ * 由事实解析 Worker 调用，在 RESUME_ANALYSIS Agent 权限上下文中把简历正文转为可核对事实画像。
+ * 输入在发送给 LLM 前经过本地校验与脱敏，输出只解析事实结构；主观判断和面试评分由其他流程负责。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ResumeAnalysisAgent {
 
+    /**
+     * 事实提取 Prompt 的当前版本标识，同时参与 Redis 解析缓存 Key 隔离。
+     * 仓库未提供 resume-facts-v2 的升级或兼容记录，版本命名依据缺失；修改会使后续任务使用新的缓存命名空间。
+     */
     public static final String PROMPT_VERSION = "resume-facts-v2";
 
+    /** 限制模型只提取原文明示事实且不得推断或输出指定敏感属性的系统提示词。 */
     private static final String SYSTEM_PROMPT = """
             你是简历事实提取助手。只提取原文明确出现的内容，不推断优势、薄弱点、年龄、性别或姓名。
             """;
 
+    /**
+     * 将脱敏简历正文包装为固定 JSON 契约的用户提示词模板；唯一格式占位符接收脱敏文本。
+     */
     private static final String USER_PROMPT_TEMPLATE = """
             请将下面简历中的可核对事实转换为 JSON。
 
@@ -58,14 +67,18 @@ public class ResumeAnalysisAgent {
             %s
             """;
 
+    /** 执行实际或 Mock 模型调用并返回原始文本的 LLM 接口。 */
     private final LlmService llmService;
+    /** 在外部发送前屏蔽联系方式、证件等已实现敏感类型的简历脱敏器。 */
     private final ResumeDesensitizer desensitizer;
+    /** 将模型 JSON 响应解析为事实画像对象的项目 ObjectMapper。 */
     private final ObjectMapper objectMapper;
 
     /**
      * 模型或 JSON 解析失败时向上抛出异常，由后台工作器记录真实失败状态。
      */
     public UserProfileData analyze(String resumeText) {
+        // 兼容入口使用空回调，不承担额度标记；后台 Worker 使用带回调重载。
         return analyze(resumeText, () -> { });
     }
 
@@ -73,6 +86,7 @@ public class ResumeAnalysisAgent {
      * 完成本地校验和脱敏后执行一次调用前回调；回调失败时绝不进入 LLM 主备调用。
      */
     public UserProfileData analyze(String resumeText, Runnable beforeModelCall) {
+        // Agent 权限上下文包裹本地处理、外部模型调用和响应解析，结束后由通用上下文恢复。
         return AgentContext.runAs(AgentType.RESUME_ANALYSIS, () -> {
             if (resumeText == null || resumeText.isBlank()) {
                 throw new IllegalArgumentException("简历文本为空");
@@ -81,16 +95,21 @@ public class ResumeAnalysisAgent {
                 throw new IllegalArgumentException("模型调用前回调不能为空");
             }
 
+            // 原始正文仅交给本地脱敏器，日志只记录长度和类型，不记录正文或掩码值。
             DesensitizationResult result = desensitizer.desensitize(resumeText);
             log.debug("[ResumeAnalysisAgent] 简历脱敏完成: inputLength={}, outputLength={}, maskedTypes={}",
                     resumeText.length(), result.text().length(), result.maskedTypes());
             String userPrompt = USER_PROMPT_TEMPLATE.formatted(result.text());
+            // 所有校验、脱敏和提示词构造成功后才标记模型调用开始；回调失败则不调用 LLM。
             beforeModelCall.run();
+            // 只把系统提示词和脱敏后的用户提示词发送到 LLM，失败向 Worker 传播。
             String response = llmService.chat(SYSTEM_PROMPT, userPrompt);
+            // 将模型文本收敛为 UserProfileData；空值或坏 JSON 会使任务进入真实失败状态。
             return parseProfile(response);
         });
     }
 
+    /** 从模型文本提取 JSON 并反序列化为事实画像；null 结果和坏 JSON 均拒绝。 */
     private UserProfileData parseProfile(String rawResponse) {
         String json = extractJson(rawResponse);
         try {
@@ -104,6 +123,7 @@ public class ResumeAnalysisAgent {
         }
     }
 
+    /** 兼容模型在 JSON 前后附带文本：有成对外层花括号时截取其范围，否则使用去空白原文。 */
     private String extractJson(String rawResponse) {
         if (rawResponse == null || rawResponse.isBlank()) {
             throw new IllegalArgumentException("模型返回内容为空");

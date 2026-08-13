@@ -12,11 +12,11 @@ import com.interviewcoach.common.llm.LlmTransport;
 public interface LlmService extends LlmTransport {
 
     /**
-     * 向 LLM 发送 prompt 并返回原始文本响应。
+     * 把系统提示词和可能包含脱敏业务数据的用户提示词交给当前 Mock 或真实供应商，并返回原始文本。
      *
-     * @param systemPrompt 系统提示词
-     * @param userPrompt   用户提示词
-     * @return LLM 原始响应文本
+     * @param systemPrompt 服务端构造的系统提示词
+     * @param userPrompt Agent 构造的用户提示词；真实实现会发送给外部模型供应商
+     * @return 供应商或 Mock 的原始响应；空响应和异常由调用方按各自任务契约处理
      */
     @Override
     String chat(String systemPrompt, String userPrompt);

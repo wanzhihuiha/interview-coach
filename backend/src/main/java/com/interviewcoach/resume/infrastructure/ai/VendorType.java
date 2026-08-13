@@ -1,19 +1,19 @@
 package com.interviewcoach.resume.infrastructure.ai;
 
 /**
- * LLM 厂商类型。
+ * 客户端工厂支持的模型协议类型，决定认证、地址和 Spring AI 客户端构建分支。
  */
 public enum VendorType {
     /**
-     * 阿里云 DashScope，使用 Spring AI Alibaba。
+     * DashScope 协议分支，使用 Spring AI Alibaba 客户端。
      */
     DASHSCOPE,
     /**
-     * OpenAI 兼容接口，可用于 OpenAI、智谱、DeepSeek 等支持 /v1/chat/completions 的厂商。
+     * OpenAI 兼容协议分支，使用配置的 Base URL、API Key 和模型名。
      */
     OPENAI_COMPATIBLE,
     /**
-     * Anthropic Messages API 兼容接口，可用于 MiniMax 订阅密钥（sk-cp-）等厂商。
+     * Anthropic Messages API 兼容协议分支，使用配置的 Base URL、API Key 和模型名。
      */
     ANTHROPIC_COMPATIBLE
 }

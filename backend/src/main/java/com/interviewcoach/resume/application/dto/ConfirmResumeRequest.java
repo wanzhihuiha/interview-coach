@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * 确认简历解析结果请求。
+ * 用户把当前解析草稿确认为正式事实画像的 HTTP 请求。
  */
 @Data
 public class ConfirmResumeRequest {
@@ -16,6 +16,9 @@ public class ConfirmResumeRequest {
      */
     private Long parseGeneration;
 
+    /**
+     * 用户确认后的事实画像；应用服务会重新规范化、校验并保存，不能把辅助分析写入该对象。
+     */
     @NotNull(message = "画像数据不能为空")
     @Valid
     private UserProfileData profile;

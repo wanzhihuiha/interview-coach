@@ -5,13 +5,15 @@ import com.interviewcoach.resume.domain.model.UserProfileData;
 import org.springframework.stereotype.Component;
 
 /**
- * 校验事实画像是否具备可供确认和面试使用的最小内容。
+ * 由画像支持组件在草稿转为正式画像前调用，判断用户提交内容是否至少包含一类可核对事实。
+ * 校验失败会抛简历模块业务异常并阻止正式画像、简历确认状态及后续辅助分析写入；草稿保存不使用本校验器。
  */
 @Component
 public class ResumeProfileValidator {
 
     /**
-     * 校验正式画像至少包含一类可核对事实；草稿保存阶段不调用此校验。
+     * 接受明示基本信息、任一技能、任一有效项目字段或任一有效工作字段中的至少一类。
+     * 输入为空或四类事实均为空时抛 PROFILE_DATA_INVALID，调用方事务保持原草稿和正式画像不变。
      */
     public void validate(UserProfileData data) {
         if (data == null) {

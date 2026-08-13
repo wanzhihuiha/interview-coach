@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 简历文本提取器，支持 PDF 与 TXT 格式。
+ * 将上传流或文件服务已落盘的 PDF/TXT 简历转换为纯文本，供事实解析 Worker 后续交给 Agent 脱敏并发送模型。
  */
 @Slf4j
 @Component
@@ -29,6 +29,7 @@ public class ResumeTextExtractor {
      */
     public String extract(MultipartFile file, String fileType) {
         try {
+            // 根据已校验的文件类型选择解析分支；PDF/TXT 都会完整读入内存后提取。
             return switch (fileType.toUpperCase()) {
                 case "PDF" -> extractFromPdf(file.getInputStream());
                 case "TXT" -> extractFromTxt(file.getInputStream());
@@ -60,6 +61,7 @@ public class ResumeTextExtractor {
             throw new IllegalArgumentException("简历文件不存在");
         }
         try {
+            // 后台任务从数据库保存的路径重新打开文件，成功后返回去除首尾空白的全文。
             return switch (fileType.toUpperCase()) {
                 case "PDF" -> extractFromPdf(Files.newInputStream(path));
                 case "TXT" -> extractFromTxt(Files.newInputStream(path));
@@ -71,6 +73,7 @@ public class ResumeTextExtractor {
         }
     }
 
+    /** 读取整个 PDF 字节并用 PDFBox 提取文本，关闭输入流和文档。 */
     private String extractFromPdf(InputStream inputStream) throws IOException {
         try (inputStream; PDDocument document = Loader.loadPDF(inputStream.readAllBytes())) {
             PDFTextStripper stripper = new PDFTextStripper();
@@ -78,6 +81,7 @@ public class ResumeTextExtractor {
         }
     }
 
+    /** 按 UTF-8 读取整个 TXT 流并去除首尾空白。 */
     private String extractFromTxt(InputStream inputStream) throws IOException {
         try (inputStream) {
             return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8).trim();

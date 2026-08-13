@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
- * 模拟 LLM 服务实现，用于本地开发或 LLM 未配置时的兜底。
+ * 在 {@code resume.llm.enabled=false} 或缺省时装配的固定 JSON 模型替身，供本地流程联调，不代表真实模型质量。
  */
 @Slf4j
 @Service
@@ -15,7 +15,8 @@ import org.springframework.stereotype.Service;
 public class MockLlmService implements LlmService {
 
     /**
-     * 根据安全网关写入的服务端任务标识返回对应 JSON；未迁移任务继续使用原有提示词特征匹配。
+     * 根据安全网关写入的服务端任务标识返回对应固定 JSON；未迁移任务继续使用提示词特征匹配。
+     * 面试评估固定分数 70、岗位置信度 0.5 的精确依据缺失，仅用于模拟分支。
      */
     @Override
     @AgentPermission({AgentType.INTERVIEWER, AgentType.EVALUATOR, AgentType.REPORT,
